@@ -108,8 +108,11 @@ export function commitTriggers(rec: LocalRecording, preview: TriggerPreview): Lo
 
 export function conditionEpochs(rec: LocalRecording, channel: string, condition: string,
                                 tmin = -.2,tmax = .8, baselineEnd = 0,
-                                excludeMarked = false, excludeRejected = false): ConditionEpochs {
+                                excludeMarked = false, excludeRejected = false, trialOffset = 0,
+                                trialLimit = 100): ConditionEpochs {
   const index=rec.info.channels.findIndex(c=>c.name===channel)
+  if(!Number.isInteger(trialOffset)||trialOffset<0||!Number.isInteger(trialLimit)||
+      trialLimit<0||trialLimit>200) throw Error('Pagination des essais invalide.')
   if(index < 0) throw Error('Canal introuvable.')
   if(!Number.isFinite(tmin)||!Number.isFinite(tmax)||tmin>=tmax||
      baselineEnd<tmin||baselineEnd>tmax) throw Error('Fenêtre d’époquage invalide.')
@@ -145,14 +148,16 @@ export function conditionEpochs(rec: LocalRecording, channel: string, condition:
   const average=Array.from({length:n},(_,i)=>accepted.reduce((sum,x)=>sum+x.row[i],0)/accepted.length)
   const sem=accepted.length>1?average.map((mean,i)=>Math.sqrt(
     accepted.reduce((total,x)=>total+(x.row[i]-mean)**2,0)/(accepted.length-1))/Math.sqrt(accepted.length)):null
-  const stride=Math.max(1,Math.ceil(n*Math.min(accepted.length,200)/100000))
+  const stride=Math.max(1,Math.ceil(n*Math.min(accepted.length,trialLimit)/100000))
   const counts:Record<string,number>={}
   accepted.forEach(({event})=>{const code=String(event.code);counts[code]=(counts[code]||0)+1})
   return {condition,channel,n:accepted.length,excluded_bounds:excludedBounds,
     excluded_manual:excludedManual,excluded_rejected:excludedRejected,
     codes:counts,time:times,mean:average,sem,
-    trial_time:times.filter((_,i)=>i%stride===0),trials:accepted.slice(0,200)
-      .map(({event,row,eventUID,review},i)=>({event_index:i,event_uid:eventUID,
+    trial_offset:trialOffset,trial_limit:trialLimit,
+    next_offset: trialLimit>0 && trialOffset+trialLimit<accepted.length ? trialOffset+trialLimit : null,
+    trial_time:times.filter((_,i)=>i%stride===0),trials:accepted.slice(trialOffset,trialOffset+trialLimit)
+      .map(({event,row,eventUID,review},i)=>({event_index:trialOffset+i,event_uid:eventUID,
         time:event.time,code:event.code,meaning:event.meaning,conditions:event.conditions,
         review_rejected:!!review?.rejected,review_reason:review?.reason||'',
         rms:Math.sqrt(row.reduce((sum,v)=>sum+v*v,0)/row.length),
