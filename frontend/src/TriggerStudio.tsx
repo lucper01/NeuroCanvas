@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import Plotly from 'plotly.js-dist-min'
 import { Activity, Check, Download, FileUp, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import type { ConditionEpochs, LocalRecording, RecordingInfo,
+import type { ConditionEpochs, ConditionMetrics, LocalRecording, RecordingInfo,
   TriggerDefinition, TriggerPreview } from './types'
 import type { Language } from './localization'
 import { api } from './api'
 import { commitTriggers, conditionEpochs, detectTriggers, epochCSV, eventCode,
-  eventCSV, mapTrigger, validateDefinitions } from './triggers'
+  eventCSV, mapTrigger, validateDefinitions, setLocalTrialDecision } from './triggers'
+import { summarizeConditions, metricsCSV } from './conditionMetrics'
 
 type Props = {
   info: RecordingInfo
@@ -62,7 +63,37 @@ const EN: Record<string,string> = {
   'Calculer les époques':'Compute epochs',
   'Comparer toutes les conditions':'Compare all conditions',
   'Essais retenus':'Included trials',
+  'Essais rejetés':'Rejected trials',
   'Essais exclus':'Excluded trials',
+  'Revue des essais':'Trial review',
+  'Rejet manuel':'Manual rejection',
+  'Rejeter cet essai':'Reject this trial',
+  'Réhabiliter cet essai':'Restore this trial',
+  'Motif du rejet':'Rejection reason',
+  'Essai conservé':'Trial included',
+  'Essai rejeté':'Trial rejected',
+  'Recalculer pour appliquer les modifications.':'Recompute to apply the review changes.',
+  'Exclure les essais rejetés':'Exclude manually rejected trials',
+  'Aucun essai rejeté':'No trials rejected',
+  'Mesures par condition':'Condition measurements',
+  'Début mesure (s)':'Measurement start (s)',
+  'Fin mesure (s)':'Measurement end (s)',
+  'Calculer les mesures':'Compute measurements',
+  'Exporter mesures CSV':'Export measurements CSV',
+  'Amplitude moyenne':'Mean amplitude',
+  'Pic':'Peak',
+  'Latence du pic':'Peak latency',
+  'Aire signée':'Signed area',
+  'Mesures descriptives seulement, sans test statistique.':'Descriptive metrics only, no inferential statistics.',
+  'Export des décisions':'Export review decisions',
+  'Essais à examiner':'Trials to review',
+  'Amplitude crête-à-crête':'Peak-to-peak amplitude',
+  'Code trigger':'Trigger code',
+  'État':'Status',
+  'Veuillez recalculer les époques après une décision.':'Please recompute epochs after a review decision.',
+  'Choisir une condition et calculer ses époques pour annoter chaque essai.':
+    'Select a condition and compute epochs to review individual trials.',
+  'Aucun essai disponible dans la période sélectionnée.':'No trials available in the selected time range.',
   'Essai individuel':'Single trial',
   'Moyenne par condition':'Condition average',
   'Époque individuelle':'Single epoch',
@@ -162,6 +193,11 @@ export default function TriggerStudio({
   const [tmax,setTmax]=useState(.8)
   const [baselineEnd,setBaselineEnd]=useState(0)
   const [excludeMarked,setExcludeMarked]=useState(false)
+  const [excludeRejected,setExcludeRejected]=useState(false)
+  const [reviewReason,setReviewReason]=useState('Artéfact identifié visuellement')
+  const [measurementStart,setMeasurementStart]=useState(0)
+  const [measurementEnd,setMeasurementEnd]=useState(.3)
+  const [metrics,setMetrics]=useState<ConditionMetrics|null>(null)
   const [averaged,setAveraged]=useState<ConditionEpochs|null>(null)
   const [comparisons,setComparisons]=useState<ConditionEpochs[]>([])
   const [trialIndex,setTrialIndex]=useState(0)
@@ -229,12 +265,12 @@ export default function TriggerStudio({
       if(compareAll){
         if(!availableConditions.length)throw Error(t('Aucun dictionnaire de codes.'))
         const output=await Promise.all(availableConditions.slice(0,12).map(condition=>remote?
-          api.triggerEpochs(remote,analysisChannel,condition,tmin,tmax,baselineEnd,excludeMarked):
-          Promise.resolve(conditionEpochs(record,analysisChannel,condition,tmin,tmax,baselineEnd,excludeMarked))))
+          api.triggerEpochs(remote,analysisChannel,condition,tmin,tmax,baselineEnd,excludeMarked,excludeRejected):
+          Promise.resolve(conditionEpochs(record,analysisChannel,condition,tmin,tmax,baselineEnd,excludeMarked,excludeRejected))))
         setComparisons(output);setAveraged(null)
       }else{
-        const result=remote?await api.triggerEpochs(remote,analysisChannel,viewCondition,tmin,tmax,baselineEnd,excludeMarked):
-          conditionEpochs(record,analysisChannel,viewCondition,tmin,tmax,baselineEnd,excludeMarked)
+        const result=remote?await api.triggerEpochs(remote,analysisChannel,viewCondition,tmin,tmax,baselineEnd,excludeMarked,excludeRejected):
+          conditionEpochs(record,analysisChannel,viewCondition,tmin,tmax,baselineEnd,excludeMarked,excludeRejected)
         setAveraged(result);setComparisons([]);setTrialIndex(0)
       }
       success(t('Époques calculées'))
@@ -253,9 +289,51 @@ export default function TriggerStudio({
     if(!averaged){error(t('Aucun essai calculé.'));return}
     try{
       if(remote)window.open(api.triggerEpochURL(remote,analysisChannel,viewCondition,tmin,tmax,
-        baselineEnd,excludeMarked),'_blank','noopener,noreferrer')
+        baselineEnd,excludeMarked,excludeRejected),'_blank','noopener,noreferrer')
       else csvDownload('neurocanvas_epochs.csv',epochCSV(averaged))
     }catch(e){error(e)}
+  }
+  const decideTrial=async(rejected:boolean)=>{
+    const trial=averaged?.trials[trialIndex]
+    if(!trial?.event_uid){error(t('Aucun essai calculé.'));return}
+    setBusy(true)
+    try{
+      if(remote){
+        const result=await api.trialReview(remote,trial.event_uid,rejected,reviewReason)
+        setRemoteInfo(result.metadata)
+      }else{
+        setRecord(old=>setLocalTrialDecision(old,trial.event_uid!,rejected,reviewReason))
+      }
+      setAveraged(null);setComparisons([]);setMetrics(null)
+      success(t('Veuillez recalculer les époques après une décision.'))
+    }catch(e){error(e)}finally{setBusy(false)}
+  }
+  const calculateMetrics=async()=>{
+    setBusy(true)
+    try{
+      const result=remote ? await api.conditionMetrics(remote,analysisChannel,tmin,tmax,
+        measurementStart,measurementEnd,baselineEnd,excludeMarked,excludeRejected) :
+        summarizeConditions(record,analysisChannel,tmin,tmax,
+          measurementStart,measurementEnd,baselineEnd,excludeMarked,excludeRejected)
+      setMetrics(result)
+      success(t('Mesures par condition'))
+    }catch(e){error(e)}finally{setBusy(false)}
+  }
+  const exportMetrics=()=>{
+    if(!metrics){error(t('Calculer les mesures'));return}
+    if(remote)window.open(api.conditionMetricsURL(remote,analysisChannel,tmin,tmax,
+      measurementStart,measurementEnd,baselineEnd,excludeMarked,excludeRejected),
+      '_blank','noopener,noreferrer')
+    else csvDownload('neurocanvas_condition_metrics.csv',metricsCSV(metrics))
+  }
+  const exportReviews=()=>{
+    csvDownload('neurocanvas_trial_review.json',JSON.stringify({
+      application:'NeuroCanvas',version:'0.4.0',
+      recording:info.name,sfreq:info.sfreq,
+      decisions:info.trial_decisions||[],
+      exclude_rejected:excludeRejected,
+      warning:'Manual trial decisions, original samples never modified.'
+    },null,2),'application/json')
   }
   const importCodebook=async (file:File)=>{
     try{
@@ -370,6 +448,8 @@ export default function TriggerStudio({
         <label>{t('Fin de baseline (s)')}<input type="number" step=".05" value={baselineEnd} onChange={e=>setBaselineEnd(Number(e.target.value))}/></label>
         <label className="toggle"><input type="checkbox" checked={excludeMarked}
           onChange={e=>setExcludeMarked(e.target.checked)}/>{t('Exclure les artéfacts marqués')}</label>
+        <label className="toggle"><input type="checkbox" checked={excludeRejected}
+          onChange={e=>setExcludeRejected(e.target.checked)}/>{t('Exclure les essais rejetés')}</label>
         <button className="primary" disabled={busy} onClick={()=>void compute(false)}>
           <RefreshCw size={15}/>{t('Calculer les époques')}</button>
         <button className="outline" disabled={busy||!availableConditions.length} onClick={()=>void compute(true)}>
@@ -391,10 +471,28 @@ export default function TriggerStudio({
               {i+1} · {trial.meaning} · {trial.time.toFixed(3)} s</option>)}</select></label></div>
           <ScientificPlot title={t('Époque individuelle')} x={averaged.trial_time}
             yTitle={averaged.unit} series={[{name:t('Essai individuel'),
-              values:averaged.trials[Math.min(trialIndex,averaged.trials.length-1)].signal}]}/></>}
+              values:averaged.trials[Math.min(trialIndex,averaged.trials.length-1)].signal}]}/>
+          <div className="trial-review-card"><div>
+            <h4>{t('Revue des essais')}</h4>
+            <p>{t('Code trigger')}: {averaged.trials[trialIndex]?.code} ·
+              {t('Amplitude crête-à-crête')}: {averaged.trials[trialIndex]?.ptp?.toPrecision(5)} {averaged.unit} ·
+              RMS: {averaged.trials[trialIndex]?.rms?.toPrecision(5)} {averaged.unit}</p>
+            <p>{averaged.trials[trialIndex]?.review_rejected ?
+              t('Essai rejeté') + ': ' + averaged.trials[trialIndex]?.review_reason :
+              t('Essai conservé')}</p>
+          </div>
+            <label>{t('Motif du rejet')}<input aria-label={t('Motif du rejet')}
+              value={reviewReason} maxLength={180} onChange={e=>setReviewReason(e.target.value)}/></label>
+            <div className="button-row">
+              <button className="outline" disabled={busy || !averaged.trials[trialIndex]?.review_rejected}
+                onClick={()=>void decideTrial(false)}>{t('Réhabiliter cet essai')}</button>
+              <button className="primary" disabled={busy || !averaged.trials[trialIndex]?.event_uid}
+                onClick={()=>void decideTrial(true)}>{t('Rejeter cet essai')}</button>
+            </div>
+          </div></>}
         <button className="primary" onClick={exportEpochs}><Download size={15}/>{t('Exporter les époques CSV')}</button>
         {remote && <button className="outline" onClick={() => window.open(api.triggerNPZURL(
-          remote,viewCondition,tmin,tmax,baselineEnd,excludeMarked),'_blank','noopener,noreferrer')}>
+          remote,viewCondition,tmin,tmax,baselineEnd,excludeMarked,excludeRejected),'_blank','noopener,noreferrer')}>
           <Download size={15}/>{t('Exporter toutes les voies (NPZ)')}</button>}
         <p className="note">{t('Les essais visibles sont un aperçu ; les exports Python sont en pleine résolution.')}</p>
       </div>}
@@ -402,7 +500,37 @@ export default function TriggerStudio({
         yTitle={comparisons[0].unit} series={comparisons.map(x=>({name:x.condition+' (n='+x.n+')',values:x.mean}))}/>
         <div className="trigger-chips">{comparisons.map(c=><span key={c.condition}>{c.condition}: {c.n}</span>)}</div></>}
       {!averaged&&!comparisons.length&&<p className="note">{t('Aucun essai calculé.')}</p>}
+      <div className="toolbar"><button className="outline" onClick={exportReviews}>
+        <Download size={15}/>{t('Export des décisions')}</button>
+        <small>{(info.trial_decisions||[]).length} {t('Essais rejetés')}</small></div>
       <p className="note">{t('Données brutes intactes')}</p>
+    </section>
+    <section className="panel">
+      <div className="panel-heading"><div><h3>05 · {t('Mesures par condition')}</h3>
+        <p>{t('Mesures descriptives seulement, sans test statistique.')}</p></div></div>
+      <div className="toolbar">
+        <label>{t('Début mesure (s)')}<input type="number" step=".01"
+          value={measurementStart} onChange={e=>setMeasurementStart(Number(e.target.value))}/></label>
+        <label>{t('Fin mesure (s)')}<input type="number" step=".01"
+          value={measurementEnd} onChange={e=>setMeasurementEnd(Number(e.target.value))}/></label>
+        <button className="primary" disabled={busy} onClick={()=>void calculateMetrics()}>
+          {t('Calculer les mesures')}</button>
+        <button className="outline" disabled={!metrics} onClick={exportMetrics}>
+          <Download size={15}/>{t('Exporter mesures CSV')}</button>
+      </div>
+      {metrics&&<div className="trigger-table"><table>
+        <thead><tr>
+          <th>{t('Condition')}</th><th>N</th><th>{t('Amplitude moyenne')}</th>
+          <th>{t('Pic')}</th><th>{t('Latence du pic')}</th>
+          <th>{t('Aire signée')}</th><th>{t('Essais exclus')}</th>
+        </tr></thead><tbody>{metrics.conditions.map(row=><tr key={row.condition}>
+          <td>{row.condition}</td><td>{row.n}</td>
+          <td>{row.mean_amplitude?.toPrecision(5)??'—'}</td>
+          <td>{row.peak_amplitude?.toPrecision(5)??'—'}</td>
+          <td>{row.peak_latency_s?.toFixed(4)??'—'} s</td>
+          <td>{row.auc?.toPrecision(5)??'—'}</td>
+          <td>{(row.excluded_bounds||0)+(row.excluded_manual||0)+(row.excluded_rejected||0)}</td>
+        </tr>)}</tbody></table></div>}
     </section>
   </div>
 }
