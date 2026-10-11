@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: npm install --no-audit --no-fund
+      - name: Run browser engine tests
+        working-directory: frontend
+        run: npm test
       - name: Build static site
         working-directory: frontend
         env:
