@@ -22,6 +22,8 @@ type Props = {
 
 const EN: Record<string,string> = {
   'Canal de triggers':'Trigger channel',
+  'Masque de bits':'Bit mask',
+  'Aucun masque':'No mask',
   'Détection depuis le signal brut':'Detection from raw samples',
   'Largeur minimale (ms)':'Minimum pulse width (ms)',
   'Intervalle minimal (ms)':'Minimum interval (ms)',
@@ -146,6 +148,7 @@ export default function TriggerStudio({
   const [widthMs,setWidthMs]=useState(0)
   const [intervalMs,setIntervalMs]=useState(0)
   const [tolerance,setTolerance]=useState(.25)
+  const [bitMask,setBitMask]=useState('none')
   const [preview,setPreview]=useState<TriggerPreview|null>(null)
   const [busy,setBusy]=useState(false)
   const [definitions,setDefinitions]=useState<TriggerDefinition[]>(()=>(info.trigger_definitions||[]).map(d=>({...d})))
@@ -198,8 +201,10 @@ export default function TriggerStudio({
   const previewDetection=async (confirm=false)=>{
     setBusy(true)
     try{
-      const result=remote?await api.triggerDetect(remote,sourceChannel,widthMs,intervalMs,tolerance,confirm):
-        detectTriggers(record,sourceChannel,widthMs,intervalMs,tolerance)
+      const result=remote?await api.triggerDetect(remote,sourceChannel,widthMs,intervalMs,tolerance,confirm,
+          bitMask==='none'?null:Number(bitMask)):
+        detectTriggers(record,sourceChannel,widthMs,intervalMs,tolerance,
+          bitMask==='none'?null:Number(bitMask))
       setPreview(result)
       if(confirm){
         if(remote && result.metadata)setRemoteInfo(result.metadata)
@@ -275,6 +280,12 @@ export default function TriggerStudio({
         <label>{t('Largeur minimale (ms)')}<input type="number" min="0" max="1000" step=".5" value={widthMs} onChange={e=>setWidthMs(Number(e.target.value))}/></label>
         <label>{t('Intervalle minimal (ms)')}<input type="number" min="0" max="5000" step="1" value={intervalMs} onChange={e=>setIntervalMs(Number(e.target.value))}/></label>
         <label>{t('Tolérance du code')}<input type="number" min="0" max=".49" step=".05" value={tolerance} onChange={e=>setTolerance(Number(e.target.value))}/></label>
+        <label>{t('Masque de bits')}<select value={bitMask} onChange={e=>setBitMask(e.target.value)}>
+          <option value="none">{t('Aucun masque')}</option>
+          <option value="255">0xFF · 8 bits</option>
+          <option value="65535">0xFFFF · 16 bits</option>
+          <option value="16777215">0xFFFFFF · 24 bits</option>
+        </select></label>
         <button className="primary" disabled={busy} onClick={()=>void previewDetection(false)}><Activity size={15}/>{t('Prévisualiser')}</button>
       </div>
       {preview&&<><div className="trigger-stats">
