@@ -141,7 +141,7 @@ def commit_detected(rec, detected):
 
 
 def condition_epochs(rec, channel, condition, tmin=-.2, tmax=.8, baseline_end=0.,
-                     exclude_marked=False, max_trials=200):
+                     exclude_marked=False, max_trials=200, exclude_rejected=False):
     if channel not in rec.names:
         raise ValueError("Unknown channel.")
     if not np.isfinite(tmin) or not np.isfinite(tmax) or tmin >= tmax:
@@ -157,9 +157,11 @@ def condition_epochs(rec, channel, condition, tmin=-.2, tmax=.8, baseline_end=0.
         raise ValueError("Selected channel is marked bad.")
     times = np.arange(start, end + 1) / rec.sfreq
     base = (times >= tmin) & (times <= baseline_end)
+    from review import event_uid, get_decision
     selected = []
     excluded_bounds = 0
     excluded_manual = 0
+    excluded_rejected = 0
     for event in rec.events:
         mapped = map_trigger(event, rec.trigger_definitions)
         if condition and condition not in mapped["conditions"]:
@@ -176,38 +178,52 @@ def condition_epochs(rec, channel, condition, tmin=-.2, tmax=.8, baseline_end=0.
         ):
             excluded_manual += 1
             continue
+        decision = get_decision(rec, event)
+        if exclude_rejected and decision and decision["rejected"]:
+            excluded_rejected += 1
+            continue
         epoch = rec.processed[rec.names.index(channel), first:last].copy()
         if baseline_end > tmin and np.any(base):
             epoch -= epoch[base].mean()
-        selected.append((mapped, epoch))
+        selected.append((mapped, epoch, event_uid(rec, event), decision))
         if len(selected) * points > MAX_EPOCH_VALUES:
             raise ValueError("Too many selected epoch samples. Narrow the interval or filter conditions.")
     if not selected:
         raise ValueError("No valid epochs for this condition and time range.")
-    data = np.vstack([epoch for _, epoch in selected])
+    data = np.vstack([epoch for _, epoch, _, _ in selected])
     mean = np.mean(data, axis=0)
     sem = np.std(data, ddof=1, axis=0) / np.sqrt(len(data)) if len(data) > 1 else None
     # Limit the number of single-trial traces returned to keep the UI responsive.
     stride = max(1, int(np.ceil(points * min(len(selected), max_trials) / 100_000)))
-    output_trials = [{"event_index": i, "time": mapped["time"], "code": mapped["code"],
-                       "meaning": mapped["meaning"], "conditions": mapped["conditions"],
-                       "signal": epoch[::stride].tolist()}
-                     for i, (mapped, epoch) in enumerate(selected[:max_trials])]
+    output_trials = [{
+        "event_index": i, "event_uid": uid,
+        "time": mapped["time"], "code": mapped["code"],
+        "meaning": mapped["meaning"], "conditions": mapped["conditions"],
+        "review_rejected": bool(decision and decision["rejected"]),
+        "review_reason": decision["reason"] if decision else "",
+        "rms": float(np.sqrt(np.mean(epoch**2))),
+        "ptp": float(np.ptp(epoch)),
+        "mean_amplitude": float(np.mean(epoch)),
+        "signal": epoch[::stride].tolist()
+    } for i, (mapped, epoch, uid, decision) in enumerate(selected[:max_trials])]
     return {
         "condition": condition, "channel": channel, "n": len(selected),
         "excluded_bounds": excluded_bounds, "excluded_manual": excluded_manual,
-        "codes": dict(sorted(Counter(str(mapped["code"]) for mapped, _ in selected).items())),
+        "excluded_rejected": excluded_rejected,
+        "codes": dict(sorted(Counter(str(mapped["code"]) for mapped, _, _, _ in selected).items())),
         "time": times.tolist(), "mean": mean.tolist(),
         "sem": sem.tolist() if sem is not None else None,
         "trial_time": times[::stride].tolist(), "trials": output_trials,
         "unit": rec.units[rec.names.index(channel)],
         "baseline": [tmin, baseline_end] if baseline_end > tmin else None,
         "exclude_marked": bool(exclude_marked),
+        "exclude_rejected": bool(exclude_rejected),
     }
 
 
 
-def epoch_rows(rec, channel, condition, tmin, tmax, baseline_end, exclude_marked):
+def epoch_rows(rec, channel, condition, tmin, tmax, baseline_end, exclude_marked,
+               exclude_rejected=False):
     """Yield one row per full-resolution epoch sample for scientific CSV export."""
     if channel not in rec.names:
         raise ValueError("Unknown channel.")
@@ -217,6 +233,7 @@ def epoch_rows(rec, channel, condition, tmin, tmax, baseline_end, exclude_marked
     mask = (times >= tmin) & (times <= baseline_end)
     accepted = 0
     signal_row = rec.processed[rec.names.index(channel)]
+    from review import event_uid, get_decision
     for ev in rec.events:
         mapped = map_trigger(ev, rec.trigger_definitions)
         if condition and condition not in mapped["conditions"]:
@@ -230,6 +247,9 @@ def epoch_rows(rec, channel, condition, tmin, tmax, baseline_end, exclude_marked
             for seg in rec.bad_segments
         )):
             continue
+        decision = get_decision(rec, ev)
+        if exclude_rejected and decision and decision["rejected"]:
+            continue
         epoch = signal_row[a:b].copy()
         if baseline_end > tmin and np.any(mask):
             epoch -= epoch[mask].mean()
@@ -237,12 +257,14 @@ def epoch_rows(rec, channel, condition, tmin, tmax, baseline_end, exclude_marked
         for offset, value in zip(times, epoch):
             yield [accepted, "|".join(mapped["conditions"]), mapped["code"] or "",
                    mapped["meaning"], ev["time"], round(float(offset), 9),
-                   float(value), rec.units[rec.names.index(channel)]]
+                   float(value), rec.units[rec.names.index(channel)],
+                   event_uid(rec, ev), bool(decision and decision["rejected"]),
+                   decision["reason"] if decision else ""]
 
 
 
 def multichannel_epochs_npz(rec, condition, tmin=-.2, tmax=.8,
-                           baseline_end=0., exclude_marked=False):
+                           baseline_end=0., exclude_marked=False, exclude_rejected=False):
     """Package event-aligned, multi-channel data into an NPZ.
 
     Shape: (trials, channels, timepoints); records input units without scaling.
@@ -268,6 +290,8 @@ def multichannel_epochs_npz(rec, condition, tmin=-.2, tmax=.8,
     trigger_labels = []
     rejected_bounds = 0
     rejected_marks = 0
+    from review import event_uid, get_decision
+    rejected_trials = 0
     time = np.arange(first, last + 1, dtype=float) / fs
     base = (time >= tmin) & (time <= baseline_end)
     for ev in rec.events:
@@ -284,6 +308,10 @@ def multichannel_epochs_npz(rec, condition, tmin=-.2, tmax=.8,
         ):
             rejected_marks += 1
             continue
+        decision = get_decision(rec, ev)
+        if exclude_rejected and decision and decision["rejected"]:
+            rejected_trials += 1
+            continue
         if (len(rows) + 1) * len(picks) * n_time > 10_000_000:
             raise ValueError("NPZ export limited to 10 million values; shorten the window or choose a condition.")
         epoch = rec.processed[picks, a:b].copy()
@@ -291,8 +319,11 @@ def multichannel_epochs_npz(rec, condition, tmin=-.2, tmax=.8,
             epoch -= np.mean(epoch[:, base], axis=1, keepdims=True)
         rows.append(epoch)
         trigger_labels.append({
+            "event_uid": event_uid(rec, ev),
             "onset_s": mapped["time"], "code": mapped["code"],
             "meaning": mapped["meaning"], "conditions": mapped["conditions"],
+            "review_rejected": bool(decision and decision["rejected"]),
+            "review_reason": decision["reason"] if decision else "",
         })
     if not rows:
         raise ValueError("No valid epochs for this condition.")
@@ -306,7 +337,10 @@ def multichannel_epochs_npz(rec, condition, tmin=-.2, tmax=.8,
         "condition": condition, "epochs": trigger_labels,
         "excluded_bounds": rejected_bounds,
         "excluded_manual": rejected_marks,
+        "excluded_rejected": rejected_trials,
         "exclude_marked": bool(exclude_marked),
+        "exclude_rejected": bool(exclude_rejected),
+        "trial_decisions": list(rec.trial_decisions),
         "baseline": [tmin, baseline_end] if baseline_end > tmin else None,
         "history": rec.steps, "trigger_definitions": rec.trigger_definitions,
         "note": "Non-diagnostic output; input channel units preserved.",
