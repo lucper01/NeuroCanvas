@@ -35,7 +35,7 @@ def map_trigger(event, definitions):
     }
 
 
-def detect_triggers(rec, channel, min_width_ms=0., min_interval_ms=0., tolerance=.25):
+def detect_triggers(rec, channel, min_width_ms=0., min_interval_ms=0., tolerance=.25, bit_mask=None):
     """Extract integer-coded nonzero TTL states, accepting stable plateaus only.
 
     A change from one nonzero code to another creates a new event. Unstable
@@ -47,11 +47,15 @@ def detect_triggers(rec, channel, min_width_ms=0., min_interval_ms=0., tolerance
         raise ValueError("Pulse width and minimum interval must be within allowed bounds.")
     if not 0 <= tolerance <= .49:
         raise ValueError("Tolerance must be within 0 and 0.49 integer units.")
+    if bit_mask is not None and (not isinstance(bit_mask, int) or bit_mask <= 0 or bit_mask > 16_777_215):
+        raise ValueError("Invalid bit mask.")
     samples = rec.original[rec.names.index(channel)]
     rounded = np.rint(samples)
     matches = np.isfinite(samples) & (np.abs(samples - rounded) <= tolerance)
     matches &= (rounded > 0) & (rounded < 2 ** 24)
     codes = np.where(matches, rounded, 0).astype(np.int64)
+    if bit_mask is not None:
+        codes &= bit_mask
     edges = np.r_[0, np.flatnonzero(np.diff(codes) != 0) + 1, len(codes)]
     min_width = max(1, int(np.ceil(min_width_ms * rec.sfreq / 1000.)))
     min_distance = int(np.ceil(min_interval_ms * rec.sfreq / 1000.))
@@ -84,6 +88,7 @@ def detect_triggers(rec, channel, min_width_ms=0., min_interval_ms=0., tolerance
             "short_rejected": short_rejected,
             "interval_rejected": interval_rejected,
             "source_channel": channel,
+            "bit_mask": bit_mask,
             "sampling_rate": rec.sfreq,
             "note": "Preview only; confirm before committing triggers. Raw samples remain untouched."}
 
