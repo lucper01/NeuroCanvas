@@ -56,3 +56,52 @@ The epoch controls select a physiological channel, condition, time limits relati
 ## French / English
 
 The interface supports **Automatic**, **Français** and **English** in the Personalization menu. Automatic chooses French for browser locales beginning with `fr`, otherwise English. The selected override is stored locally on the device. Recorded signal values, trigger codes, user-defined condition labels and scientific units are never machine-translated.
+
+
+## v0.4 trial-level review and analysis protocols
+
+Each confirmed event is assigned a stable identity derived from source, original
+code and sample index (or an explicit ID where available). Users can review
+trial-specific amplitude, RMS and peak-to-peak values, then **reject or restore
+individual trials**, recording a required rejection reason.
+
+Trial decisions are independent of the bad-segment and bad-channel annotations.
+They are applied to the condition average **only if** the "Exclude manually
+rejected trials" option is enabled. The unfiltered average remains available
+for comparison; the underlying data are never modified.
+
+The preview loads paginated trial traces (up to 100 per page). Grand averages,
+SEM and the sample count always refer to the full condition, not just the
+displayed page. Trial heatmaps visualize the samples for the current page.
+A researcher can navigate more trials and annotate them without changing the
+condition's unreviewed dataset.
+
+The **Condition measurements** report specifies a measurement interval
+contained inside the epoch window, and produces for each defined condition:
+- Number of accepted trials and counts of each contributing original code
+- Excluded boundary, artifact and manually rejected trials
+- Mean amplitude over the measurement interval
+- Signed peak amplitude and peak latency (largest absolute peak)
+- Signed trapezoidal integral (AUC)
+
+These are **descriptive statistics, not significance tests**. Waveform
+comparisons require appropriate units, baselines, artifact choices and
+subject-level replication before statistical testing or publication.
+
+Export:
+- Reviewed-trial JSON containing event identifiers, reasons and rejection state
+- Individual-epoch CSV/NPZ including event identity and rejection provenance
+- Condition-metrics CSV including the measurement window and filtering choices
+- A validated **Analysis Protocol JSON** with trigger channel, detection
+  tolerances, optional bit mask, complete trigger codebook, epochs, baseline,
+  measurement window and explicit exclusion flags. The protocol stores no
+  acquisition signal arrays, subject identifiers or event data.
+
+Importing a protocol loads the controls and editable codebook; the user must
+**explicitly save** the codebook to apply the mappings to the active recording.
+When a saved channel does not exist, the interface falls back to a suitable
+channel without editing the acquisition.
+
+For Python-backed sessions the API retains trial annotations in transient
+memory. Export review decisions and associated analyses before restarting
+the local engine; sessions are not persistent across restarts.
