@@ -35,6 +35,8 @@ Definitions are validated for unique code identifiers and exported as JSON. The 
 
 The event table contains onset (s), duration (s), sample index, code, raw label, meaning, condition membership, and source.
 
+For Python-backed sessions, **Export all channels (NPZ)** creates a compressed NumPy archive with an array shaped `(trials, channels, samples)`. Non-stimulus channels (EEG, ECG, EDA, RSP, EMG, etc.) are included together. The archive preserves relative time points, names, channel types, input units, event codes/meanings, grouping, preprocessing history and trial exclusions. The maximum export is 10 million sample values to limit in-memory allocation; narrow the condition or epoch window for larger datasets.
+
 The epoch controls select a physiological channel, condition, time limits relative to trigger onset (e.g., -0.2 to +0.8 s), baseline end and optional exclusion of manually annotated artifact periods. The output provides:
 - Per-condition grand average, optional SEM and individual trial preview.
 - Number of accepted epochs, boundary exclusions and manual exclusions.
