@@ -1,4 +1,5 @@
 fastapi>=0.115,<1
+starlette>=0.51,<2
 uvicorn[standard]>=0.34,<1
 python-multipart>=0.0.20
 numpy>=1.26
