@@ -249,9 +249,10 @@ export function spectrogram(rec: LocalRecording, name: string, start = 0, durati
     power: frequency.map((_, i) => columns.map(column => 10 * Math.log10(Math.max(1e-24, column[i])))),
     unit: 'dB re 1 ' + rec.info.channels[idx].unit + '²/Hz' }
 }
-export function erp(rec: LocalRecording, channel: string, label: string, tmin = -.2, tmax = .8): Evoked {
+export function erp(rec: LocalRecording, channel: string, label: string, tmin = -.2, tmax = .8, excludeMarked = false): Evoked {
   const idx = rec.info.channels.findIndex(c => c.name === channel)
   if (idx < 0 || tmin >= tmax) throw Error('Canal ou fenêtre invalide.')
+  if (excludeMarked && (rec.info.bad_channels || []).includes(channel)) throw Error('Canal marqué comme mauvais.')
   const fs = rec.info.sfreq
   const a = Math.round(tmin * fs), b = Math.round(tmax * fs)
   const trials: number[][] = []
@@ -259,6 +260,8 @@ export function erp(rec: LocalRecording, channel: string, label: string, tmin = 
   for (const event of rec.info.events.filter(x => !label || x.label === label)) {
     const sample = Math.round(event.time * fs), lo = sample + a, hi = sample + b + 1
     if (lo < 0 || hi > rec.info.samples) { excluded++; continue }
+    if (excludeMarked && (rec.info.bad_segments || []).some(mark =>
+      mark.start < hi / fs && mark.end > lo / fs)) { excluded++; continue }
     const data = rec.processed[idx].slice(lo, hi)
     const baselineSamples = Math.max(0, Math.min(data.length, -a + 1))
     const baseline = baselineSamples ? data.slice(0, baselineSamples).reduce((x, y) => x + y, 0) / baselineSamples : 0
