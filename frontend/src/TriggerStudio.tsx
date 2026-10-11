@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import Plotly from 'plotly.js-dist-min'
 import { Activity, Check, Download, FileUp, Plus, RefreshCw, Trash2 } from 'lucide-react'
@@ -10,6 +10,7 @@ import { commitTriggers, conditionEpochs, detectTriggers, epochCSV, eventCode,
   eventCSV, mapTrigger, validateDefinitions, setLocalTrialDecision } from './triggers'
 import { summarizeConditions, metricsCSV } from './conditionMetrics'
 import { createAnalysisProtocol, parseAnalysisProtocol } from './analysisProtocol'
+import { VisualThemeContext } from './VisualThemeContext'
 
 type Props = {
   info: RecordingInfo
@@ -165,6 +166,7 @@ function ScientificPlot({ x, series, title, yTitle }: {
   x: number[]; series: { name: string; values: number[]; color?: string; dash?: string }[];
   title: string; yTitle: string
 }) {
+  const theme = useContext(VisualThemeContext)
   const el = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!el.current) return
@@ -174,18 +176,22 @@ function ScientificPlot({ x, series, title, yTitle }: {
       line:{color:item.color || ['#1c8265','#ba8552','#5478a8','#ad6887','#8a76b7'][i%5],
         width:item.dash?1:2,dash:item.dash}
     })),{
-      height:310,autosize:true,paper_bgcolor:'#fff',plot_bgcolor:'#fff',
-      font:{size:11,color:'#63786e'},margin:{l:65,r:16,t:36,b:55},
-      title:{text:title,font:{size:13}},
-      xaxis:{title:{text:'Time (s)'},gridcolor:'#e9f0ea'},
-      yaxis:{title:{text:yTitle},gridcolor:'#e9f0ea'},
+      height:310,autosize:true,
+      paper_bgcolor:theme==='dark'?'#151c2a':'#fff',
+      plot_bgcolor:theme==='dark'?'#151c2a':'#fff',
+      font:{size:11,color:theme==='dark'?'#adc1dd':'#63786e'},
+      margin:{l:65,r:16,t:36,b:55},
+      title:{text:title,font:{size:13,color:theme==='dark'?'#e4efff':'#334b42'}},
+      xaxis:{title:{text:'Time (s)'},gridcolor:theme==='dark'?'#2e3951':'#e9f0ea'},
+      yaxis:{title:{text:yTitle},gridcolor:theme==='dark'?'#2e3951':'#e9f0ea'},
       legend:{orientation:'h',y:-.3}
     },{responsive:true,displaylogo:false})
     return ()=>{Plotly.purge(node)}
-  },[x,series,title,yTitle])
+  },[x,series,title,yTitle,theme])
   return <div className="trigger-plot" ref={el}/>
 }
 function EpochHeatmap({ epochs, title }: { epochs: ConditionEpochs; title: string }) {
+  const theme=useContext(VisualThemeContext)
   const target=useRef<HTMLDivElement>(null)
   useEffect(()=>{
     const node=target.current
@@ -200,15 +206,16 @@ function EpochHeatmap({ epochs, title }: { epochs: ConditionEpochs; title: strin
       hovertemplate:'t=%{x:.3f} s<br>trial=%{y}<br>amplitude=%{z:.5g}<extra></extra>'
     }],{
       autosize:true,height:Math.min(560,Math.max(310,epochs.trials.length*4+140)),
-      paper_bgcolor:'#fff',plot_bgcolor:'#fff',
-      title:{text:title,font:{size:13}},
+      paper_bgcolor:theme==='dark'?'#151c2a':'#fff',
+      plot_bgcolor:theme==='dark'?'#151c2a':'#fff',
+      title:{text:title,font:{size:13,color:theme==='dark'?'#e4eeff':'#334b42'}},
       margin:{l:70,r:24,t:48,b:52},
-      xaxis:{title:{text:'Time (s)'}},
-      yaxis:{title:{text:'Trial index'},autorange:'reversed'},
-      font:{size:11,color:'#60736a'}
+      xaxis:{title:{text:'Time (s)'},gridcolor:theme==='dark'?'#2e3951':'#e9f0ea'},
+      yaxis:{title:{text:'Trial index'},autorange:'reversed',gridcolor:theme==='dark'?'#2e3951':'#e9f0ea'},
+      font:{size:11,color:theme==='dark'?'#adc1dd':'#60736a'}
     },{responsive:true,displaylogo:false})
     return ()=>{Plotly.purge(node)}
-  },[epochs,title])
+  },[epochs,title,theme])
   return <div className="trigger-heatmap" ref={target}/>
 }
 
