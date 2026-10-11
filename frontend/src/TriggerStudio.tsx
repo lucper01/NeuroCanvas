@@ -68,6 +68,7 @@ const EN: Record<string,string> = {
   'Époque individuelle':'Single epoch',
   'Exporter les événements CSV':'Export event CSV',
   'Exporter les époques CSV':'Export epoch CSV',
+  'Exporter toutes les voies (NPZ)':'Export all channels (NPZ)',
   'Annuler la sélection':'Clear selection',
   'Données brutes intactes':'Raw data unchanged',
   'Les codes d’un groupe sont conservés séparément dans les exports.':
@@ -392,6 +393,9 @@ export default function TriggerStudio({
             yTitle={averaged.unit} series={[{name:t('Essai individuel'),
               values:averaged.trials[Math.min(trialIndex,averaged.trials.length-1)].signal}]}/></>}
         <button className="primary" onClick={exportEpochs}><Download size={15}/>{t('Exporter les époques CSV')}</button>
+        {remote && <button className="outline" onClick={() => window.open(api.triggerNPZURL(
+          remote,viewCondition,tmin,tmax,baselineEnd,excludeMarked),'_blank','noopener,noreferrer')}>
+          <Download size={15}/>{t('Exporter toutes les voies (NPZ)')}</button>}
         <p className="note">{t('Les essais visibles sont un aperçu ; les exports Python sont en pleine résolution.')}</p>
       </div>}
       {comparisons.length>0&&<><ScientificPlot title={t('Moyenne par condition')} x={comparisons[0].time}
