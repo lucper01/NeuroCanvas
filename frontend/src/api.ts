@@ -22,10 +22,10 @@ export const api = {
     return call<BackendInfo>('/import', { method: 'POST', body: form })
   },
   metadata: (id: string) => call<RecordingInfo>('/sessions/' + encoded(id)),
-  viewport: async (id: string, names: string[], start: number, duration: number) => {
+  viewport: async (id: string, names: string[], start: number, duration: number, raw = false) => {
     const response = await call<{ traces: Trace[] }>('/sessions/' + encoded(id) + '/viewport', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channels: names, start, duration, max_points: 1500 })
+      body: JSON.stringify({ channels: names, start, duration, max_points: 1500, raw })
     })
     return response.traces
   },
@@ -44,7 +44,7 @@ export const api = {
   addEvent: (id: string, time: number, label: string) => call<RecordingInfo>('/sessions/' + encoded(id) + '/events', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ time, label, duration: 0 })
   }),
-  csvURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/export/csv',
+  csvURL: (id: string, processed = true) => ROOT + '/sessions/' + encoded(id) + '/export/csv?processed=' + processed,
   editChannel: (id: string, index: number, type: string, unit: string) =>
     call<RecordingInfo>('/sessions/' + encoded(id) + '/channels/' + index, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, unit })
