@@ -110,13 +110,24 @@ def create_demo():
     rsp = np.sin(2 * np.pi * .23 * t) + rng.normal(0, .025, len(t))
     emg = .04 * rng.standard_normal(len(t))
     emg[(t > 12) & (t < 15)] *= 5
+    ttl = np.zeros(len(t))
+    codes = [11, 12, 21, 22, 11, 12, 21]
+    for onset, code in zip((5, 10, 15, 20, 25, 30, 35), codes):
+        sample = int(round(onset * fs))
+        ttl[sample:sample + 3] = code
     rec = Recording("Synthetic training signals (not human data)",
-                    np.stack([eeg, ecg, eda, rsp, emg]), fs,
-                    ["EEG Fz", "ECG", "EDA", "RSP", "EMG"],
-                    ["eeg", "ecg", "misc", "resp", "emg"],
-                    ["V", "a.u.", "a.u.", "a.u.", "a.u."], "synthetic",
+                    np.stack([eeg, ecg, eda, rsp, emg, ttl]), fs,
+                    ["EEG Fz", "ECG", "EDA", "RSP", "EMG", "TRIGGER TTL"],
+                    ["eeg", "ecg", "misc", "resp", "emg", "stim"],
+                    ["V", "a.u.", "a.u.", "a.u.", "a.u.", "code"], "synthetic",
                     events=[{"time": float(k), "duration": 0, "label": "stimulus"}
                             for k in (5, 10, 15, 20, 25, 30, 35)])
+    rec.trigger_definitions = [
+        {"code":11,"meaning":"Visual standard","conditions":["Visual"]},
+        {"code":12,"meaning":"Visual deviant","conditions":["Visual"]},
+        {"code":21,"meaning":"Auditory standard","conditions":["Auditory"]},
+        {"code":22,"meaning":"Auditory deviant","conditions":["Auditory"]},
+    ]
     key = uuid.uuid4().hex
     if len(SESSIONS) >= 6:
         SESSIONS.pop(next(iter(SESSIONS)))
