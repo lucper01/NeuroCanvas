@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test('interactive workspace navigation, spectra and export', async ({ page, isMobile }) => {
   await page.goto('/')
   await expect(page).toHaveTitle(/NeuroCanvas/)
-  await expect(page.getByRole('heading', { name: 'Your signal workspace' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Votre espace d'exploration des signaux' })).toBeVisible()
   await expect(page.getByText('Démonstration physiologique synthétique', { exact: true })).toBeVisible()
 
   const navigate = async (title: string) => {
@@ -11,19 +11,19 @@ test('interactive workspace navigation, spectra and export', async ({ page, isMo
     await page.getByRole('button', { name: title, exact: true }).click()
   }
   await navigate('Signal Explorer')
-  await expect(page.getByRole('heading', { name: 'Time-domain explorer' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Channel inspector' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Explorateur temporel' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Inspecteur de canaux' })).toBeVisible()
 
   await navigate('Signal Processing')
   await expect(page.getByText('Pipeline vierge')).toBeVisible()
 
   await navigate('Frequency Lab')
-  await expect(page.getByText('Power spectral density (Welch)')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('Densité spectrale de puissance (Welch)')).toBeVisible({ timeout: 20_000 })
   await page.getByLabel('Méthode').selectOption('FFT')
   await expect(page.getByText('FFT · spectre d\'amplitude')).toBeVisible()
 
   await navigate('Learning Studio')
-  await expect(page.getByRole('heading', { name: 'Signal synthesis laboratory' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Laboratoire de synthèse de signaux' })).toBeVisible()
   await page.getByRole('button', { name: 'Régénérer les signaux' }).click()
   await expect(page.getByRole('status')).toContainText('Démonstration synthétique chargée.')
 
@@ -43,5 +43,5 @@ test('offline-compatible CSV import without backend', async ({ page, isMobile })
   await expect(page.getByText('synthetic.csv', { exact: true }).first()).toBeVisible()
   if (isMobile) await page.getByRole('button', { name: 'Menu', exact: true }).click()
   await page.getByRole('button', { name: 'Export & Reproducibility' }).click()
-  await expect(page.getByRole('heading', { name: 'Recording audit trail' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Historique de l'enregistrement' })).toBeVisible()
 })
