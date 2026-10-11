@@ -234,7 +234,7 @@ def apply_pipeline(rec: Recording, steps: list[dict]):
     return rec.metadata()
 
 
-def viewport(rec: Recording, names: list[str], start: float, duration: float, max_points: int = 1200):
+def viewport(rec: Recording, names: list[str], start: float, duration: float, max_points: int = 1200, raw: bool = False):
     if not names:
         names = rec.names[:8]
     lo = max(0, int(start * rec.sfreq))
@@ -247,7 +247,7 @@ def viewport(rec: Recording, names: list[str], start: float, duration: float, ma
         if name not in rec.names:
             continue
         i = rec.names.index(name)
-        y = rec.processed[i, lo:hi]
+        y = (rec.original if raw else rec.processed)[i, lo:hi]
         if len(y) <= max_points:
             loc = np.arange(len(y), dtype=int)
         else:
