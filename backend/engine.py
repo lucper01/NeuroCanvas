@@ -174,6 +174,19 @@ def load_recording(path: Path, sfreq: float | None, workdir: Path):
     for a in raw.annotations:
         annotations.append({"time": float(a["onset"]), "duration": float(a["duration"]),
                             "label": str(a["description"])})
+    # For EDF/BDF/FIF acquisitions, event codes can be encoded on stim channels
+    # rather than annotations; retain those event labels and sample positions.
+    stim = [n for n, kind in zip(raw.ch_names, raw.get_channel_types()) if kind == "stim"]
+    if stim:
+        try:
+            found = mne.find_events(raw, stim_channel=stim, shortest_event=1,
+                                    initial_event=True, verbose="ERROR")
+            for sample, _, code in found:
+                annotations.append({"time": float((sample - raw.first_samp) / raw.info["sfreq"]),
+                                    "duration": 0.0, "label": str(int(code))})
+        except (ValueError, RuntimeError):
+            pass  # The visible stim channels remain importable even without events.
+    annotations.sort(key=lambda ev: ev["time"])
     types = raw.get_channel_types()
     units = ["V" if kind in {"eeg", "eog", "ecg", "emg", "seeg", "ecog"} else "SI" for kind in types]
     return Recording(path.name, matrix, float(raw.info["sfreq"]), list(raw.ch_names),
