@@ -58,7 +58,8 @@ export function qualityWindows(
     const mid = median(sorted)
     const mad = median(windows.map(w => Math.abs(w.ptp - mid)).sort((a,b) => a-b))
     windows.forEach(w => {
-      w.relative_high_amplitude = mad > 0 && w.ptp > mid + 8 * 1.4826 * mad
+      w.relative_high_amplitude = (mad > 0 && w.ptp > mid + 8 * 1.4826 * mad) ||
+        (mad === 0 && mid > 0 && w.ptp > mid * 3)
       w.relative_flat = mid > 0 && w.ptp < .001 * mid
     })
     return { name: rec.info.channels[index].name, type: rec.info.channels[index].type,
