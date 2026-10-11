@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { resolveLanguage, translateLabel, localizeTree } from './localization'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resolveLanguage, translateLabel, localizeTree, loadPreferences, savePreferences, DEFAULT_PREFERENCES, PREFERENCE_KEY } from './localization'
 import { createElement } from 'react'
 import { qualityWindows, validateMarkedSegment, overlapsSegment } from './qc'
 import { demo, erp } from './engine'
@@ -62,5 +62,33 @@ describe('Offline artifact screening', () => {
       [{ start: 5, end: 5.1, reason: 'movement' }] } }
     expect(erp(updated, 'EEG Fz', 'stimulus').n).toBe(original.n)
     expect(erp(updated, 'EEG Fz', 'stimulus', -.2, .8, true).n).toBe(original.n - 1)
+  })
+})
+
+
+describe('Persisted dark and light themes',()=>{
+  afterEach(()=>vi.unstubAllGlobals())
+  it('uses Neural Night dark as the default appearance',()=>{
+    vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{}})
+    expect(loadPreferences()).toEqual(DEFAULT_PREFERENCES)
+    expect(loadPreferences().theme).toBe('dark')
+  })
+  it('remembers appearance and language after a reload-like read',()=>{
+    const memory=new Map<string,string>()
+    vi.stubGlobal('localStorage',{
+      getItem:(key:string)=>memory.get(key)||null,
+      setItem:(key:string,value:string)=>{memory.set(key,value)}
+    })
+    savePreferences({language:'en',density:'compact',theme:'light'})
+    expect(loadPreferences()).toEqual({language:'en',density:'compact',theme:'light'})
+    expect(memory.has(PREFERENCE_KEY)).toBe(true)
+  })
+  it('migrates previous preferences safely, preserving language choice',()=>{
+    vi.stubGlobal('localStorage',{getItem:()=>JSON.stringify({language:'fr',density:'standard'}),setItem:()=>{}})
+    expect(loadPreferences()).toEqual({language:'fr',density:'standard',theme:'dark'})
+  })
+  it('rejects invalid theme names without losing other valid preferences',()=>{
+    vi.stubGlobal('localStorage',{getItem:()=>JSON.stringify({language:'en',density:'compact',theme:'neon-hack'}),setItem:()=>{}})
+    expect(loadPreferences()).toEqual({language:'en',density:'compact',theme:'dark'})
   })
 })
