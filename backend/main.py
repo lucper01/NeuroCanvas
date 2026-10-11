@@ -151,8 +151,10 @@ def tfr(key: str, channel: str, start: float = 0, duration: float = 30):
 
 
 @app.get("/api/sessions/{key}/erp")
-def erp(key: str, channel: str, label: str = "", tmin: float = -0.2, tmax: float = 0.8):
-    return guard(lambda: evoked(session_or_404(key), channel, label, tmin, tmax))
+def erp(key: str, channel: str, label: str = "", tmin: float = -0.2, tmax: float = 0.8,
+        exclude_marked: bool = False):
+    return guard(lambda: evoked(session_or_404(key), channel, label, tmin, tmax,
+                                exclude_marked=exclude_marked))
 
 
 @app.get("/api/sessions/{key}/physiology")
@@ -251,9 +253,10 @@ def mne_psd(key: str, start: float = 0, duration: float = 30, fmin: float = 1, f
 
 @app.get("/api/sessions/{key}/mne/epochs")
 def mne_erp(key: str, label: str, tmin: float = -.2, tmax: float = .8,
-            reject_peak_uv: float | None = None):
+            reject_peak_uv: float | None = None, exclude_marked: bool = False):
     return guard(lambda: mne_epochs(session_or_404(key), label, tmin, tmax,
-                                    reject_peak_uv=reject_peak_uv))
+                                    reject_peak_uv=reject_peak_uv,
+                                    exclude_marked=exclude_marked))
 
 
 @app.get("/api/sessions/{key}/mne/montage")
@@ -269,3 +272,70 @@ def ica(key: str, n_components: int = Query(10, ge=2, le=20)):
 @app.get("/api/sessions/{key}/neurokit/hrv")
 def hrv(key: str, channel: str):
     return guard(lambda: nk_hrv(session_or_404(key), channel))
+
+
+# Curated QC decisions are metadata only. No original samples are overwritten.
+from advanced import windowed_quality
+
+
+class MarkedSegment(BaseModel):
+    start: float = Field(ge=0)
+    end: float = Field(gt=0)
+    reason: str = Field(min_length=2, max_length=180)
+
+
+class MarkedChannel(BaseModel):
+    name: str = Field(min_length=1, max_length=180)
+    marked: bool = True
+
+
+@app.get("/api/sessions/{key}/qc/windows")
+def quality_windows(key: str, window_seconds: float = Query(2.0, ge=0.2, le=60),
+                    channel: str | None = None):
+    return guard(lambda: windowed_quality(
+        session_or_404(key), window_seconds, channel,
+    ))
+
+
+@app.post("/api/sessions/{key}/qc/segments")
+def add_bad_segment(key: str, body: MarkedSegment):
+    recording = session_or_404(key)
+    if body.start >= body.end or body.end > recording.duration + 1 / recording.sfreq:
+        raise HTTPException(422, "Invalid segment bounds.")
+    if len(recording.bad_segments) >= 500:
+        raise HTTPException(422, "Maximum 500 marked segments per recording.")
+    recording.bad_segments.append(body.model_dump())
+    recording.bad_segments.sort(key=lambda item: item["start"])
+    return recording.metadata()
+
+
+@app.delete("/api/sessions/{key}/qc/segments/{index}")
+def remove_bad_segment(key: str, index: int):
+    recording = session_or_404(key)
+    if not 0 <= index < len(recording.bad_segments):
+        raise HTTPException(404, "Unknown marked-segment index.")
+    recording.bad_segments.pop(index)
+    return recording.metadata()
+
+
+@app.post("/api/sessions/{key}/qc/channels")
+def mark_bad_channel(key: str, body: MarkedChannel):
+    recording = session_or_404(key)
+    if body.name not in recording.names:
+        raise HTTPException(422, "Unknown channel name.")
+    recording.bad_channels = [
+        name for name in recording.bad_channels if name != body.name
+    ]
+    if body.marked:
+        recording.bad_channels.append(body.name)
+    return recording.metadata()
+
+
+@app.get("/api/sessions/{key}/qc/export")
+def export_qc(key: str):
+    recording = session_or_404(key)
+    return {"recording": recording.name,
+            "sfreq": recording.sfreq,
+            "bad_channels": recording.bad_channels,
+            "bad_segments": recording.bad_segments,
+            "note": "Manual decisions, not automatically established artifacts."}
