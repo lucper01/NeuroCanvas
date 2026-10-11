@@ -339,3 +339,123 @@ def export_qc(key: str):
             "bad_channels": recording.bad_channels,
             "bad_segments": recording.bad_segments,
             "note": "Manual decisions, not automatically established artifacts."}
+
+
+# Trigger detection and experimental-condition model.
+from triggers import (detect_triggers, validate_definitions, commit_detected,
+                      condition_epochs, map_trigger)
+
+
+class TriggerDefinition(BaseModel):
+    code: int = Field(ge=1, le=16777215)
+    meaning: str = Field(min_length=1, max_length=180)
+    conditions: list[str] = Field(default_factory=list, max_length=16)
+
+
+class TriggerCodebook(BaseModel):
+    definitions: list[TriggerDefinition] = Field(default_factory=list, max_length=2000)
+
+
+class TriggerDetection(BaseModel):
+    channel: str = Field(min_length=1)
+    min_width_ms: float = Field(default=0, ge=0, le=1000)
+    min_interval_ms: float = Field(default=0, ge=0, le=5000)
+    tolerance: float = Field(default=.25, ge=0, le=.49)
+    commit: bool = False
+
+
+@app.put("/api/sessions/{key}/triggers/codebook")
+def update_trigger_codebook(key: str, body: TriggerCodebook):
+    rec = session_or_404(key)
+    rec.trigger_definitions = guard(lambda: validate_definitions([
+        item.model_dump() for item in body.definitions
+    ]))
+    return rec.metadata()
+
+
+@app.post("/api/sessions/{key}/triggers/detect")
+def trigger_detector(key: str, body: TriggerDetection):
+    rec = session_or_404(key)
+    detection = guard(lambda: detect_triggers(
+        rec, body.channel, body.min_width_ms, body.min_interval_ms, body.tolerance,
+    ))
+    if body.commit:
+        detection["commit"] = commit_detected(rec, detection)
+        detection["metadata"] = rec.metadata()
+    return detection
+
+
+@app.get("/api/sessions/{key}/triggers/events")
+def trigger_event_list(key: str, condition: str = ""):
+    rec = session_or_404(key)
+    events = [map_trigger(ev, rec.trigger_definitions) for ev in rec.events]
+    if condition:
+        events = [ev for ev in events if condition in ev["conditions"]]
+    return {"events": events, "count": len(events), "condition": condition,
+            "conditions": sorted({c for d in rec.trigger_definitions for c in d["conditions"]})}
+
+
+@app.get("/api/sessions/{key}/triggers/epochs")
+def trigger_epochs(key: str, channel: str, condition: str = "",
+                   tmin: float = -.2, tmax: float = .8,
+                   baseline_end: float = 0, exclude_marked: bool = False):
+    return guard(lambda: condition_epochs(
+        session_or_404(key), channel, condition, tmin, tmax,
+        baseline_end, exclude_marked,
+    ))
+
+
+@app.get("/api/sessions/{key}/triggers/export/events")
+def export_trigger_events(key: str):
+    rec = session_or_404(key)
+    lines = io.StringIO()
+    writer = csv.writer(lines)
+    writer.writerow(["onset_s", "duration_s", "sample", "code", "label",
+                     "meaning", "conditions", "source"])
+    for event in sorted(rec.events, key=lambda item: float(item["time"])):
+        mapped = map_trigger(event, rec.trigger_definitions)
+        writer.writerow([
+            event["time"], event.get("duration", 0),
+            int(round(float(event["time"]) * rec.sfreq)),
+            mapped["code"] if mapped["code"] is not None else "",
+            event.get("label", ""), mapped["meaning"],
+            "|".join(mapped["conditions"]), event.get("source", "manual"),
+        ])
+    return StreamingResponse(iter([lines.getvalue()]), media_type="text/csv",
+                             headers={"Content-Disposition": "attachment; filename=neurocanvas_triggers.csv"})
+
+
+@app.get("/api/sessions/{key}/triggers/export/codebook")
+def export_trigger_codebook(key: str):
+    rec = session_or_404(key)
+    return {"definitions": rec.trigger_definitions,
+            "conditions": sorted({c for d in rec.trigger_definitions for c in d["conditions"]}),
+            "recording": rec.name, "sfreq": rec.sfreq}
+
+
+@app.get("/api/sessions/{key}/triggers/export/epochs")
+def export_trigger_epochs(key: str, channel: str, condition: str = "",
+                          tmin: float = -.2, tmax: float = .8,
+                          baseline_end: float = 0, exclude_marked: bool = False):
+    rec = session_or_404(key)
+    result = guard(lambda: condition_epochs(rec, channel, condition, tmin, tmax,
+                                            baseline_end, exclude_marked, max_trials=50000))
+    if result["n"] > 1000 or result["n"] * len(result["time"]) > 1_000_000:
+        raise HTTPException(422, "CSV epoch export is limited to 1 million values / 1000 epochs.")
+    # Export the full underlying epochs, not the UI-decimated trial samples.
+    from triggers import epoch_rows
+    def rows():
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(["trial_index", "condition", "code", "meaning", "onset_s",
+                         "relative_time_s", "amplitude", "unit"])
+        yield stream.getvalue()
+        stream.seek(0)
+        stream.truncate()
+        for row in epoch_rows(rec, channel, condition, tmin, tmax, baseline_end, exclude_marked):
+            writer.writerow(row)
+            yield stream.getvalue()
+            stream.seek(0)
+            stream.truncate()
+    return StreamingResponse(rows(), media_type="text/csv",
+                             headers={"Content-Disposition": "attachment; filename=neurocanvas_epochs.csv"})
