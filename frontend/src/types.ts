@@ -1,6 +1,6 @@
 export type Channel = { name: string; type: string; unit: string }
 export type TriggerDefinition = { code: number; meaning: string; conditions: string[] }
-export type EventMark = { time: number; label: string; duration: number; code?: number; source?: string }
+export type EventMark = { time: number; label: string; duration: number; code?: number; source?: string; uid?: string }
 export type MappedTrigger = Omit<EventMark, 'code'> & { code: number | null; meaning: string; conditions: string[] }
 export type TriggerPreview = { events: MappedTrigger[]; counts: Record<string, number>;
   short_rejected: number; interval_rejected: number; source_channel: string;
