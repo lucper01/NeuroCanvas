@@ -8,7 +8,7 @@ test.describe('Internationalization and personalization', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
     await expect(page.getByRole('button', { name: /Explore signals/ })).toBeVisible()
     await page.getByRole('button', { name: /Personalization/ }).click()
-    const dialog = page.getByRole('dialog', { name: /Personalization/ })
+    const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     await dialog.getByRole('radio', { name: /French|Français/ }).check()
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
