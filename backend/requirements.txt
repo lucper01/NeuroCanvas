@@ -1,0 +1,9 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.34,<1
+python-multipart>=0.0.20
+numpy>=1.26
+scipy>=1.14
+pandas>=2.2
+mne>=1.9
+neurokit2>=0.2.10
+bioread>=3.0
