@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import Plotly from 'plotly.js-dist-min'
-import { Activity, Check, Database, Download, FileUp, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import type { ConditionEpochs, LocalRecording, MappedTrigger, RecordingInfo,
+import { Activity, Check, Download, FileUp, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import type { ConditionEpochs, LocalRecording, RecordingInfo,
   TriggerDefinition, TriggerPreview } from './types'
 import type { Language } from './localization'
 import { api } from './api'
