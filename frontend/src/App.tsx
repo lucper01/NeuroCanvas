@@ -96,6 +96,7 @@ export default function App() {
   const [duration, setDuration] = useState(10)
   const [compare, setCompare] = useState(false)
   const [traces, setTraces] = useState<Trace[]>([])
+  const [rawTraces, setRawTraces] = useState<Trace[]>([])
   const [psd, setPsd] = useState<Spectrum | null>(null)
   const [fftData, setFftData] = useState<{ frequency: number[]; amplitude: number[]; unit: string; method: string } | null>(null)
   const [spectralMethod, setSpectralMethod] = useState<'PSD' | 'FFT'>('PSD')
@@ -143,7 +144,7 @@ export default function App() {
     setChannel(newInfo.channels[0]?.name || '')
     setStart(0); setDuration(Math.min(10, newInfo.duration || 10))
     setEventLabel(newInfo.events[0]?.label || 'stimulus')
-    setTraces([]); setPsd(null); setFftData(null); setTfr(null); setEvoked(null); setPhysio(null); setAdvancedOutput(null)
+    setTraces([]); setRawTraces([]); setPsd(null); setFftData(null); setTfr(null); setEvoked(null); setPhysio(null); setAdvancedOutput(null)
   }
   const loadDemo = () => { const rec = demo(250, 40, alpha, noise); activate(rec.info, null, rec); success('Démonstration synthétique chargée.') }
   const loadPythonDemo = async () => {
@@ -189,8 +190,13 @@ export default function App() {
     try {
       const result = remote ? await api.viewport(remote, selection, from, window) : viewport(record, selection, from, window)
       setTraces(result)
+      if (compare) {
+        const rawResult = remote ? await api.viewport(remote, selection, from, window, true) :
+          viewport(record, selection, from, window, true)
+        setRawTraces(rawResult)
+      } else setRawTraces([])
     } catch (e) { error(e) }
-  }, [remote, info, selection, start, duration, sfreq, record, error])
+  }, [remote, info, selection, start, duration, sfreq, record, compare, error])
   useEffect(() => { void loadTraces() }, [loadTraces])
 
   const loadSpectral = useCallback(async () => {
@@ -305,15 +311,15 @@ export default function App() {
   const exportMeta = () => saveBlob(JSON.stringify({ application: 'NeuroCanvas', version: '0.1.0', created_at: new Date().toISOString(),
     info, method: remote ? 'Python/SciPy/MNE/NeuroKit2' : 'JavaScript / educational preview',
     signal_units: info?.channels.map(c => ({ name: c.name, unit: c.unit, type: c.type })) }, null, 2), 'application/json', 'neurocanvas_provenance.json')
-  const exportCSV = () => {
-    if (remote) { window.open(api.csvURL(remote), '_blank', 'noopener,noreferrer'); return }
+  const exportCSV = (raw = false) => {
+    if (remote) { window.open(api.csvURL(remote, !raw), '_blank', 'noopener,noreferrer'); return }
     const header = ['time_s', ...record.info.channels.map(c => c.name)]
     const output = [header.map(csvValue).join(',')]
     for (let j = 0; j < record.info.samples; j++) {
-      const row = [j / record.info.sfreq, ...record.processed.map(r => r[j])]
+      const row = [j / record.info.sfreq, ...(raw ? record.raw : record.processed).map(r => r[j])]
       output.push(row.map(csvValue).join(','))
     }
-    saveBlob(output.join('\n'), 'text/csv;charset=utf-8', 'neurocanvas_processed.csv')
+    saveBlob(output.join('\n'), 'text/csv;charset=utf-8', raw ? 'neurocanvas_raw.csv' : 'neurocanvas_processed.csv')
   }
   const exportSession = () => {
     if (remote) { error('Les sessions Python en mémoire ne sont pas sérialisées. Exporter les données CSV et la provenance JSON.'); return }
@@ -329,18 +335,20 @@ export default function App() {
       const average = t.y.reduce((acc, v) => acc + v, 0) / Math.max(1, t.y.length)
       const spread = Math.max(1e-10, ...t.y.map(x => Math.abs(x - average)))
       const normalized = t.y.map(y => (y - average) / spread + (total - 1 - i) * 2.7)
-      result.push({ x: t.x, y: normalized, name: t.name + ' (' + (t.unit || 'a.u.') + ')', type: 'scattergl',
-        mode: 'lines', line: { color: COLORS[i % COLORS.length], width: 1.4 }, hovertemplate: '%{x:.3f} s<extra>' + t.name + '</extra>' })
-      if (compare && !remote) {
-        const rawTrace = viewport(record, [t.name], start, duration, true)[0]
+      result.push({ x: t.x, y: normalized, customdata: t.y, name: t.name + ' (' + (t.unit || 'a.u.') + ')', type: 'scattergl',
+        mode: 'lines', line: { color: COLORS[i % COLORS.length], width: 1.4 },
+        hovertemplate: '%{x:.3f} s · %{customdata:.5g} ' + (t.unit || 'a.u.') + '<extra>' + t.name + '</extra>' })
+      if (compare) {
+        const rawTrace = rawTraces.find(x => x.name === t.name)
         if (rawTrace && rawTrace.x.length === t.x.length)
           result.push({ x: rawTrace.x, y: rawTrace.y.map(y => (y - average) / spread + (total - 1 - i) * 2.7),
-            name: t.name + ' brut', type: 'scattergl', mode: 'lines',
+            customdata: rawTrace.y, name: t.name + ' brut', type: 'scattergl', mode: 'lines',
+            hovertemplate: '%{x:.3f} s · %{customdata:.5g} ' + (t.unit || 'a.u.') + '<extra>Brut : ' + t.name + '</extra>',
             line: { color: COLORS[i % COLORS.length], width: 1, dash: 'dot' } })
       }
     }
     return result
-  }, [traces, compare, remote, record, start, duration])
+  }, [traces, compare, rawTraces])
   const bands = useMemo(() => {
     if (!psd) return []
     const defs = [{ name: 'δ', a: .5, b: 4 }, { name: 'θ', a: 4, b: 8 }, { name: 'α', a: 8, b: 13 },
@@ -436,7 +444,7 @@ export default function App() {
                 {[1,2,5,10,20,30,60].map(n => <option key={n} value={n}>{n} s</option>)}</select></label>
               <button className="outline" onClick={() => setStart(Math.max(0, start - duration))}>← Précédent</button>
               <button className="outline" onClick={() => setStart(Math.min(Math.max(0, (info?.duration || 0) - duration), start + duration))}>Suivant →</button>
-              {!remote && <label className="toggle"><input type="checkbox" checked={compare} onChange={e => setCompare(e.target.checked)}/> Brut vs traité</label>}
+              <label className="toggle"><input type="checkbox" checked={compare} onChange={e => setCompare(e.target.checked)}/> Brut vs traité</label>
             </div>
             <Plot traces={signalTraces} shapes={graphShapes} height={480} yTitle="Canaux normalisés et décalés" />
             <div className="timeline"><input type="range" min="0" max={Math.max(0, (info?.duration || 0) - Math.min(duration, info?.duration || 0))}
@@ -452,6 +460,16 @@ export default function App() {
               <span className="channel-dot" style={{ background: COLORS[i % COLORS.length] }}/><span><strong>{ch.name}</strong><small>{ch.type} · {ch.unit}</small></span></label>)}</div>
             <p className="note">Jusqu'à 16 traces simultanées. L'échelle est normalisée par canal pour les superposer sans confondre les unités.</p>
           </Panel></div>
+          <Panel title="Native amplitude" description="Valeurs mesurées dans leur unité physique déclarée, sans normalisation verticale">
+            <div className="toolbar"><label>Canal<select value={channel} onChange={e => setChannel(e.target.value)}>
+              {channels.map(c => <option key={c.name}>{c.name}</option>)}</select></label>
+              <button className="outline" onClick={() => setSelection(old => old.includes(channel) ? old : [...old, channel].slice(0,16))}>
+                Afficher ce canal</button></div>
+            {traces.filter(x=>x.name===channel).map(trace => <Plot key={trace.name} title={trace.name} xTitle="Temps (s)"
+              yTitle={'Amplitude (' + (trace.unit || 'a.u.') + ')'} height={260}
+              traces={[{ type:'scattergl', mode:'lines', x:trace.x, y:trace.y, name:trace.name,
+                line:{color:COLORS[0],width:1.5} }]}/>)}
+          </Panel>
           <Panel title="Event annotations" description="Ajouter des marqueurs temporels pour explorer les réponses aux stimuli">
             <div className="toolbar"><label>Temps (s)<input type="number" step=".01" min="0" max={info?.duration} value={eventTime}
               onChange={e => setEventTime(Number(e.target.value))}/></label>
@@ -621,7 +639,8 @@ export default function App() {
         {tab === 'export' && <>
           <div className="export-grid"><Panel title="Processed data" description="Matrice multicanal au format tabulaire">
             <div className="export-icon"><Database size={28}/></div><p>Exporter les échantillons traités avec l'axe temporel en secondes.</p>
-            <button className="primary" onClick={exportCSV}><Download size={16}/> Télécharger CSV</button></Panel>
+            <div className="button-row"><button className="primary" onClick={() => exportCSV(false)}><Download size={16}/> CSV traité</button>
+              <button className="outline" onClick={() => exportCSV(true)}><Database size={16}/> CSV brut</button></div></Panel>
             <Panel title="Scientific provenance" description="Traçabilité du traitement">
               <div className="export-icon"><ClipboardList size={28}/></div><p>Métadonnées, fréquence, unités, marqueurs et pipeline d'analyse dans un JSON lisible.</p>
               <button className="primary" onClick={exportMeta}><Download size={16}/> Télécharger provenance</button></Panel>
