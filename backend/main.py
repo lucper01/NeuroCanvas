@@ -471,3 +471,17 @@ def export_trigger_epochs(key: str, channel: str, condition: str = "",
             stream.truncate()
     return StreamingResponse(rows(), media_type="text/csv",
                              headers={"Content-Disposition": "attachment; filename=neurocanvas_epochs.csv"})
+
+
+
+@app.get("/api/sessions/{key}/triggers/export/multichannel")
+def export_multichannel_epochs(key: str, condition: str = "",
+                               tmin: float = -.2, tmax: float = .8,
+                               baseline_end: float = 0,
+                               exclude_marked: bool = False):
+    from triggers import multichannel_epochs_npz
+    result = guard(lambda: multichannel_epochs_npz(
+        session_or_404(key), condition, tmin, tmax, baseline_end, exclude_marked
+    ))
+    return StreamingResponse(result, media_type="application/octet-stream",
+                             headers={"Content-Disposition": "attachment; filename=neurocanvas_multichannel_epochs.npz"})
