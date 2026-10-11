@@ -1,1 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="40" fill="#175b4b"/><path d="M20 96h28l13-31 22 65 25-83 19 51 12-16h33" stroke="#faf9ed" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="155" cy="82" r="7" fill="#e1c77e"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1">
+      <stop stop-color="#19233b"/>
+      <stop offset="1" stop-color="#0b111f"/>
+    </linearGradient>
+    <linearGradient id="wave" x2="1" y2="0">
+      <stop stop-color="#5ed5ff"/>
+      <stop offset=".5" stop-color="#a89aff"/>
+      <stop offset="1" stop-color="#ff7da7"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop stop-color="#9c87ff" stop-opacity=".48"/>
+      <stop offset="1" stop-color="#9c87ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="url(#bg)"/>
+  <circle cx="102" cy="95" r="82" fill="url(#glow)"/>
+  <path d="M21 99H54L69 70L85 134L108 57L127 116L146 91H171"
+    fill="none" stroke="url(#wave)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="151" cy="91" r="6" fill="#ff91bd"/>
+  <rect x="1.5" y="1.5" width="189" height="189" rx="40.5"
+    fill="none" stroke="#435675" stroke-width="3"/>
+</svg>

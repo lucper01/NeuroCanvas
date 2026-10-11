@@ -22,6 +22,16 @@ The project is general-purpose and independent of any single experiment or resea
 
 **Browser mode** can open CSV/TSV, load/save local JSON sessions, generate demonstrations, identify coded trigger pulses, group trial events and run fast exploratory analysis without a server. **Python mode** enables additional file formats and specialized biomedical algorithms. Python analysis runs **on the user's own computer**, not on GitHub Pages.
 
+## Visual interface
+
+The default interface uses **Neural Night**, a dark, instrument-style neuroscience dashboard with a conceptual luminous brain illustration, live-session waveform previews and PSD-derived frequency-band visualizations. The spectral graphics represent actual available data, not cognitive-state diagnoses. The brain graphic is illustrative rather than a measured MRI or source reconstruction.
+
+Choose **Personalization → Appearance → Dark / Light** to switch between the dark immersive interface and the lighter **Research Light** view. Theme, French/English interface language and standard/compact density preferences are stored locally on the current device. Scientific values and acquisition metadata are not transformed by UI preferences.
+
+On-screen Plotly figures follow the active theme. PNG/SVG scientific plot exports use white-background presentation for reports and manuscripts.
+
+See [DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) for the color system, accessibility considerations and visuals' scientific scope.
+
 ## Data support
 
 | File | Browser | Python |

@@ -7,7 +7,7 @@ test.describe('Scientific trial review and reproducibility',()=>{
     async({page,isMobile})=>{
       await page.goto('/')
       if(isMobile)await page.getByRole('button',{name:'Menu'}).click()
-      await page.getByRole('button',{name:'Trigger & Epoch Studio'}).click()
+      await page.getByRole('button',{name:'Trigger & Epoch Studio',exact:true}).click()
 
       const protocolDownload=page.waitForEvent('download')
       await page.getByRole('button',{name:'Exporter le protocole'}).click()

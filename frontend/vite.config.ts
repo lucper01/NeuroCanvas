@@ -16,8 +16,8 @@ export default defineConfig({
         description: 'Scientific biosignal exploration and processing workbench',
         start_url: './',
         display: 'standalone',
-        background_color: '#f6f5ef',
-        theme_color: '#175b4b',
+        background_color: '#090d16',
+        theme_color: '#111825',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
