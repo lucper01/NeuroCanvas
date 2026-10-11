@@ -6,7 +6,7 @@ test.describe('Trigger codes, conditions and epoch workflows', () => {
   test('detects TTL pulses, groups two codes into one condition and exports epochs', async ({page,isMobile}) => {
     await page.goto('/')
     if(isMobile)await page.getByRole('button',{name:'Menu'}).click()
-    await page.getByRole('button',{name:'Trigger & Epoch Studio'}).click()
+    await page.getByRole('button',{name:'Trigger & Epoch Studio',exact:true}).click()
     await expect(page.getByText('01 · Détection depuis le signal brut')).toBeVisible()
     await page.getByRole('button',{name:'Prévisualiser'}).click()
     await expect(page.getByText('11 : 2')).toBeVisible()
