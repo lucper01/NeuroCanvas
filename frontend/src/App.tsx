@@ -113,6 +113,8 @@ export default function App() {
   const [notch, setNotch] = useState('50')
   const [alpha, setAlpha] = useState(10)
   const [noise, setNoise] = useState(1)
+  const [demoRate, setDemoRate] = useState(250)
+  const [demoTone, setDemoTone] = useState(20)
   const [showTfr, setShowTfr] = useState(false)
   const [advancedMode, setAdvancedMode] = useState('quality')
   const [advancedOutput, setAdvancedOutput] = useState<Record<string, unknown> | null>(null)
@@ -146,7 +148,7 @@ export default function App() {
     setEventLabel(newInfo.events[0]?.label || 'stimulus')
     setTraces([]); setRawTraces([]); setPsd(null); setFftData(null); setTfr(null); setEvoked(null); setPhysio(null); setAdvancedOutput(null)
   }
-  const loadDemo = () => { const rec = demo(250, 40, alpha, noise); activate(rec.info, null, rec); success('Démonstration synthétique chargée.') }
+  const loadDemo = () => { const rec = demo(demoRate, 40, alpha, noise, demoTone); activate(rec.info, null, rec); success('Démonstration synthétique chargée.') }
   const loadPythonDemo = async () => {
     setBusy(true)
     try {
@@ -621,8 +623,17 @@ export default function App() {
               <input type="range" min="6" max="15" value={alpha} step=".5" onChange={e=>setAlpha(Number(e.target.value))}/></label>
               <label>Amplitude du bruit <strong>× {format(noise,1)}</strong>
                 <input type="range" min="0" max="5" value={noise} step=".1" onChange={e=>setNoise(Number(e.target.value))}/></label>
+              <label>Seconde oscillation <strong>{demoTone} Hz</strong>
+                <input type="range" min="5" max="140" value={demoTone} step="1" onChange={e=>setDemoTone(Number(e.target.value))}/></label>
+              <label>Échantillonnage <strong>{demoRate} Hz</strong>
+                <select value={demoRate} onChange={e=>setDemoRate(Number(e.target.value))}>
+                  {[64,100,128,250,500,1000].map(hz=><option key={hz} value={hz}>{hz} Hz</option>)}
+                </select></label>
               <button className="primary" onClick={loadDemo}><Sparkles size={16}/> Régénérer les signaux</button>
               {connected && <button className="outline" disabled={busy} onClick={() => void loadPythonDemo()}>Démo scientifique Python</button>}</div>
+            {demoTone >= demoRate/2 && <div className="toast error"><Info size={16}/>
+              <span>Risque de repliement spectral : l'oscillation de {demoTone} Hz dépasse Nyquist ({format(demoRate/2,1)} Hz).
+              Régénérez les données et examinez la PSD pour observer l'aliasing.</span></div>}
             <Plot title="Exemple de signaux multicanaux synthétiques" traces={signalTraces} height={395} yTitle="Canaux normalisés et décalés"/>
           </Panel>
           <div className="learning-grid">{[
