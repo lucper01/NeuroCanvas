@@ -19,11 +19,16 @@ from engine import (Recording, load_recording, viewport, power_spectrum, spectro
 
 app = FastAPI(title="NeuroCanvas local scientific engine", version="0.1.0",
               description="Local exploratory biosignal processing. Not for clinical use.")
-app.add_middleware(CORSMiddleware, allow_origins=[
+TRUSTED_ORIGINS = [
     "http://localhost:5173", "http://127.0.0.1:5173",
     "http://localhost:4173", "http://127.0.0.1:4173",
     "https://lucper01.github.io",
-], allow_credentials=False, allow_methods=["GET", "POST", "DELETE"], allow_headers=["Content-Type"])
+]
+app.add_middleware(
+    CORSMiddleware, allow_origins=TRUSTED_ORIGINS,
+    allow_credentials=False, allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type"], allow_private_network=True,
+)
 SESSIONS: dict[str, Recording] = {}
 MAX_UPLOAD = 150 * 1024 * 1024
 

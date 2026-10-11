@@ -121,7 +121,7 @@ export function applySteps(recording: LocalRecording, steps: Step[]): LocalRecor
   const fs = recording.info.sfreq
   for (const step of steps) {
     const picks = recording.info.channels.map((ch, i) => ({ ch, i }))
-      .filter(x => !step.channels?.length || step.channels.includes(x.ch.name)).map(x => x.i)
+      .filter(x => step.channels === undefined || step.channels.includes(x.ch.name)).map(x => x.i)
     if (!picks.length) throw Error('Aucun canal correspondant au traitement.')
     if (step.method === 'average_reference') {
       const eeg = picks.filter(i => recording.info.channels[i].type === 'eeg')

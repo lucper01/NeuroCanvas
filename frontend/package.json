@@ -9,7 +9,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "predev": "node scripts/generate-icons.mjs",
     "prebuild": "node scripts/generate-icons.mjs",
-    "test": "vitest run"
+    "test": "vitest run src/engine.test.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -25,6 +26,7 @@
     "vite": "^6.3.0",
     "vite-plugin-pwa": "^1.0.0",
     "sharp": "^0.34.0",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "@playwright/test": "^1.56.0"
   }
 }

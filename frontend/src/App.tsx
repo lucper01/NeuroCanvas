@@ -273,6 +273,7 @@ export default function App() {
   }
 
   const addStep = async () => {
+    if (!selection.length) { error('Sélectionner au moins un canal avant d’appliquer un traitement.'); return }
     const newStep: Step = { method: stepType, channels: [...selection] }
     if (stepType === 'filter') {
       newStep.low = low.trim() ? Number(low) : null
