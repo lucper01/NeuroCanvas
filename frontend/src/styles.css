@@ -99,3 +99,203 @@ button.primary,button.outline{border-radius:9px;display:inline-flex;align-items:
 .trial-review-card label{display:flex;flex-direction:column;gap:7px;color:#456f58;font-size:11px;font-weight:700}
 .trial-review-card input{width:100%;max-width:430px;border:1px solid #cadccb;border-radius:8px;padding:9px 10px;color:#294c36;background:#fff}
 .trial-review-card .button-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:0}
+
+
+/* ================================================================
+   NEUROCANVAS | NEURAL NIGHT
+   Imaging-inspired UI: dark optics, restrained chromatic edge
+   accents, actual data visualizations, coherent readability.
+   ================================================================ */
+:root{--night-0:#090d16;--night-1:#111724;--night-2:#171e2c;--night-3:#1d2738;--night-stroke:#303b50;
+--night-fg:#e8eefb;--night-muted:#9aaac1;--neon-blue:#64ceff;--neon-purple:#a996ff;--neon-pink:#ff79a7}
+html[data-theme="dark"]{background:var(--night-0);color-scheme:dark}
+.theme-dark{background:radial-gradient(ellipse at 52% -20%,#192036 0%,#0c111a 55%,#090d16 100%);color:var(--night-fg)}
+.theme-dark .sidebar{background:#0c111c;border-right:1px solid #253042}
+.theme-dark .brand{border-bottom:1px solid #20293a;padding-top:22px;padding-bottom:20px}
+.theme-dark .brand-mark{color:#a4edff;background:linear-gradient(130deg,#282952,#13334b);border:1px solid #52619a55;box-shadow:0 0 30px #7e79f32b}
+.theme-dark .brand strong{color:#f3f6ff}
+.theme-dark .brand span,.theme-dark .nav-heading{color:#72829e}
+.theme-dark .nav-link{color:#a1afc6}
+.theme-dark .nav-link:hover{background:#1b2435;color:#e4f5ff}
+.theme-dark .nav-link.active{color:#eeeaff;background:linear-gradient(95deg,#3b365f,#1c2742);box-shadow:inset 3px 0 0 #a592ff}
+.theme-dark .nav-link.active svg{color:#b4a5ff}
+.theme-dark .nav-current{background:#a592ff;box-shadow:0 0 9px #b7a6ff9c}
+.theme-dark .side-bottom{border-color:#263145}
+.theme-dark .connection{background:#151f2c;border-color:#344052;color:#a6b7ce}
+.theme-dark .connection.online{background:#142b30;border-color:#285962;color:#80e1d4}
+.theme-dark .plain{color:#9cacbe}
+.theme-dark .main{background:transparent}
+.theme-dark .topbar{background:#111825ea;border-bottom:1px solid #30384c;backdrop-filter:blur(12px)}
+.theme-dark .breadcrumbs{color:#a3b1c7}
+.theme-dark .breadcrumbs span{color:#5b6981}
+.theme-dark .status-pill{background:#202a3c;border:1px solid #344358;color:#a9b6d1}
+.theme-dark .status-pill.ready{background:#163639;border-color:#286067;color:#83e2cd}
+.theme-dark .page-heading h1{color:#f1f5ff}
+.theme-dark .page-heading p,.theme-dark .eyebrow{color:#8799b8}
+.theme-dark .workspace{max-width:1800px}
+.theme-dark .panel,.theme-dark .metric,.theme-dark .data-bar,.theme-dark .floating-import{
+  background:linear-gradient(150deg,#171e2b 0%,#141b29 100%);
+  border:1px solid #334056;color:#e1eaf6;box-shadow:0 10px 28px #0002}
+.theme-dark .panel-heading h3,.theme-dark h4,.theme-dark .quick-actions strong,.theme-dark .data-bar strong,
+.theme-dark .metric>strong,.theme-dark .channel-row strong,.theme-dark .step strong,
+.theme-dark .help-grid h4,.theme-dark .empty-state h3{color:#e8f0fe}
+.theme-dark .panel-heading p,.theme-dark .metric-head,.theme-dark .metric>small,.theme-dark .data-bar small,
+.theme-dark .tiny-label,.theme-dark .quick-actions small,.theme-dark .channel-row small,
+.theme-dark .note,.theme-dark .panel>p,.theme-dark .help-grid p,.theme-dark .empty-state,
+.theme-dark .metric small,.theme-dark .step small,.theme-dark .footer{color:#97a8c0!important}
+.theme-dark .metric-icon,.theme-dark .export-icon{background:#282f4c;color:#a7a2ff}
+.theme-dark .metric{position:relative;overflow:hidden}
+.theme-dark .metric:before{content:"";position:absolute;top:0;left:0;width:100%;height:2px;
+  background:linear-gradient(90deg,#4fc3ee,#aa80ff,#f15c9c);opacity:.55}
+.theme-dark .quick-actions>button,.theme-dark .measure,.theme-dark .summary-list>div,
+.theme-dark .channel-row{border-color:#2c374a;color:#adc1db}
+.theme-dark .quick-actions>button:hover{background:#232d45}
+.theme-dark .text-button{color:#94cbff}
+.theme-dark button.primary,.theme-dark .primary{background:linear-gradient(110deg,#736bd9,#6c5fc4);border-color:#8e85e9;color:white;
+  box-shadow:0 4px 15px #6f63d028}
+.theme-dark button.primary:hover{background:linear-gradient(110deg,#8681ef,#7d71d9)}
+.theme-dark button.outline,.theme-dark .outline{background:#1c2638;border:1px solid #44526d;color:#d9e6fa}
+.theme-dark button.outline:hover{background:#293750;border-color:#65749b}
+.theme-dark .light-button{background:#9e93ff;color:#14182c;border-color:#9e93ff}
+.theme-dark .light-outline{border-color:#7787b3;color:#e3e8ff}
+.theme-dark .icon-button,.theme-dark .plain{color:#a9b9d0}
+.theme-dark .toolbar label,.theme-dark .form-stack label,.theme-dark .fs-control,
+.theme-dark .learning-controls label{color:#b3c1d5}
+.theme-dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.theme-dark select,.theme-dark textarea{
+  background:#0e1623!important;border:1px solid #3b4a63!important;
+  color:#e6f0fd!important;accent-color:#9587ef}
+.theme-dark input::placeholder,.theme-dark textarea::placeholder{color:#758ba7}
+.theme-dark .toolbar input[type=checkbox],.theme-dark .channel-row input,.theme-dark input[type=radio]{accent-color:#9b86ff}
+.theme-dark .timeline input,.theme-dark .learning-controls input{accent-color:#947ff7}
+.theme-dark .tiny{background:#202b41;border-color:#394967;color:#b9d9f4}
+.theme-dark .plot-wrap{border-radius:9px;overflow:hidden}
+.theme-dark .step,.theme-dark .hint,.theme-dark .result-info,.theme-dark .band,.theme-dark .event-chips>span{
+  background:#1e2a3e;border:1px solid #334058;color:#b7c8df}
+.theme-dark .band strong,.theme-dark .band span{color:#c5b8ff}
+.theme-dark .band small{color:#9aaac2}
+.theme-dark .step-index,.theme-dark .learning-controls label strong{color:#ab9cfe}
+.theme-dark .toast.ok{background:#183c37;color:#a0e7c8}
+.theme-dark .toast.error{background:#442533;color:#ffb1b8}
+.theme-dark .toast button{color:inherit}
+.theme-dark .working{background:#32305a;border:1px solid #6c62a2}
+.theme-dark .code-preview{background:#0a101a;border:1px solid #3d4a63;color:#a7d7ff}
+.theme-dark .scroll-table th,.theme-dark .qc-table th,.theme-dark .trigger-table th{
+  background:#26324a;color:#cedff3;border-color:#465674}
+.theme-dark .scroll-table td,.theme-dark .qc-table td,.theme-dark .trigger-table td{
+  color:#b7c8df;border-color:#334158}
+.theme-dark .scroll-table,.theme-dark .qc-table,.theme-dark .trigger-table{border-color:#344157}
+.theme-dark .qc-table tbody tr:hover{background:#2a3550}
+.theme-dark .qc-table tr.qc-flagged{background:#3a293c}
+.theme-dark .qc-stats>div,.theme-dark .trigger-stats>div{
+  background:#202a3e;border-color:#394761}
+.theme-dark .qc-stats strong,.theme-dark .trigger-stats strong{color:#ad9bff}
+.theme-dark .qc-stats small,.theme-dark .trigger-stats small{color:#a4b6cd}
+.theme-dark .trigger-intro{background:linear-gradient(110deg,#222746,#152337);border-color:#4d4b76;color:#d8d5ff}
+.theme-dark .trigger-intro strong{color:#e7e4ff}
+.theme-dark .trigger-intro p{color:#a8b8d2}
+.theme-dark .trigger-chip,.theme-dark .trigger-chips span{background:#2c3052;color:#c9c2ff;border-color:#565684}
+.theme-dark .trigger-group,.theme-dark .trial-review-card{background:#1e293d;border-color:#3a4862}
+.theme-dark .trial-review-card h4{color:#e6e8ff}
+.theme-dark .trial-review-card p,.theme-dark .trial-review-card label{color:#b1c0d8}
+.theme-dark .trigger-table input:not([type=checkbox]){background:#0f1727;border-color:#475675;color:#e7edf8}
+.theme-dark .preferences-backdrop{background:#070b14cc;backdrop-filter:blur(8px)}
+.theme-dark .preferences-panel{background:#172031;border-color:#556481;color:#eaf0ff;box-shadow:0 24px 90px #000b}
+.theme-dark .preferences-top{border-color:#3b4a60}
+.theme-dark .preferences-top small,.theme-dark .preferences-group p,.theme-dark .preferences-note{color:#a9b7ce}
+.theme-dark .preferences-top h2,.theme-dark .preferences-group h3{color:#f1f3ff}
+.theme-dark .preference-choice{background:#101928;border-color:#3e4b66;color:#e6eaff}
+.theme-dark .preference-choice.selected{background:#262c4f;border-color:#9b92ff}
+.theme-dark .preference-choice small{color:#abbad0}
+.theme-dark .language-mini{background:#302b57;color:#d8ceff}
+.theme-dark .neuro-live-dot{background:#7de8cb}
+
+/* High fidelity research dashboard inspired by spectral-neuroimaging displays. */
+.neuro-command-dashboard{--neuro-edge:#374159;--neuro-bg:#131925;--neuro-card:#181f2c;
+  background:#111824;border:1px solid #394155;border-radius:18px;padding:18px;
+  color:#ebeffc;box-shadow:0 24px 60px #0004;overflow:hidden}
+.neuro-command-header,.neuro-panel-header{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.neuro-command-header{margin-bottom:17px;padding:4px 5px}
+.neuro-command-header h2{font-size:22px;letter-spacing:-.8px;color:#f3f5ff;margin:8px 0 5px}
+.neuro-command-header p{color:#96a6bf;font-size:11px;margin:0}
+.neuro-command-eyebrow{display:flex;align-items:center;gap:8px;font-size:9px;font-weight:800;letter-spacing:1.8px;color:#b4a9ff}
+.neuro-live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#69e5cd;box-shadow:0 0 12px #55fdd074}
+.neuro-command-actions{display:flex;gap:8px;flex-wrap:wrap}
+.neuro-command-primary{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr);gap:12px}
+.neuro-brain-panel,.neuro-data-panel,.neuro-spectrum-panel,.neuro-band-card{
+  background:radial-gradient(ellipse at 74% 36%,#24283f 0%,#171e2d 50%,#121925 100%);
+  border:1px solid #3a445d;border-radius:13px;min-width:0}
+.neuro-brain-panel{min-height:393px;display:flex;flex-direction:column;overflow:hidden}
+.neuro-panel-header{padding:16px 17px 5px;color:#c3d1e9;font-size:10px;font-weight:800;letter-spacing:1.1px}
+.neuro-panel-header>span:first-child{display:flex;gap:9px;align-items:center}
+.neuro-panel-header svg{color:#9f99ff}
+.neuro-panel-hint{font-size:9px;color:#8798b2;font-weight:500;text-transform:none;letter-spacing:0}
+.neuro-status-chip{font-size:9px;color:#8de1d3;background:#153a3d;border:1px solid #28666b;border-radius:20px;padding:6px 8px}
+.neuro-status-chip span{width:5px;height:5px;border-radius:100%;background:#85e4c8;display:inline-block;margin-right:4px}
+.neuro-brain-art{flex:1;min-height:300px;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 65% 50%,#371a3d61 0%,transparent 65%)}
+.neuro-brain-art svg{width:min(100%,490px);height:auto;max-height:330px;filter:drop-shadow(0 17px 25px #0009)}
+.neuro-brain-footer{display:flex;justify-content:space-between;align-items:center;gap:5px;
+  font-size:9px;color:#829ab2;padding:6px 18px 14px}
+.neuro-brain-footer span:first-child{display:flex;gap:7px;align-items:center}
+.neuro-command-right{display:grid;grid-template-rows:minmax(0,1fr) auto;gap:12px;min-width:0}
+.neuro-data-panel{padding-bottom:6px}
+.neuro-wave-rows{padding:6px 14px 10px;display:flex;flex-direction:column;justify-content:space-evenly;height:calc(100% - 37px);min-height:145px}
+.neuro-wave-row{display:grid;grid-template-columns:94px minmax(0,1fr);align-items:center;gap:12px;border-bottom:1px solid #ffffff0c;padding:5px 2px}
+.neuro-wave-row:last-child{border-bottom:none}
+.neuro-wave-row strong{font-size:10px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.neuro-wave-row small{font-size:9px;display:block;margin-top:5px;color:#8195b0}
+.neuro-sparkline{width:100%;height:46px;display:block;overflow:visible;filter:drop-shadow(0 0 3px #76b7e733)}
+.neuro-spectrum-panel{min-height:154px;padding-bottom:8px}
+.neuro-spectrum-bars{padding:12px 16px 5px;display:flex;flex-direction:column;gap:9px}
+.neuro-spectrum-bar{display:grid;grid-template-columns:47px minmax(0,1fr) 43px;gap:10px;align-items:center}
+.neuro-spectrum-bar>span{font-size:9px;letter-spacing:.6px;font-weight:800}
+.neuro-spectrum-bar>div{height:6px;border-radius:20px;background:#303a4e;overflow:hidden}
+.neuro-spectrum-bar i{display:block;height:100%;border-radius:20px;box-shadow:0 0 8px #9988ef30}
+.neuro-spectrum-bar small{text-align:right;color:#b2c2d8;font-size:10px;font-variant-numeric:tabular-nums}
+.neuro-spectrum-panel>p{color:#7f91ab;font-size:9px;line-height:1.5;margin:6px 17px 0}
+.neuro-band-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:12px}
+.neuro-band-card{text-align:left;cursor:pointer;padding:12px 14px;color:#f0efff;
+  transition:transform .18s,border-color .18s,box-shadow .18s;min-height:152px}
+.neuro-band-card:hover{transform:translateY(-2px);border-color:#6e7ca5;box-shadow:0 6px 25px #21234755}
+.neuro-band-header{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px;letter-spacing:1.2px;font-weight:800;color:#96a6bd}
+.neuro-band-header span:last-child{font-size:16px}
+.neuro-band-card>strong{display:block;font-size:21px;letter-spacing:-.8px;font-weight:700;margin:8px 0 4px}
+.neuro-band-card>strong small{font-size:10px;color:#a2b0c9;font-weight:500}
+.neuro-band-card>small{display:block;font-size:9px;color:#adbdd1}
+.neuro-band-card .neuro-sparkline{height:34px;margin:8px 0 0}
+.neuro-band-foot{display:flex;align-items:center;justify-content:space-between;font-size:9px;color:#8499ba;margin-top:5px}
+.neuro-command-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 3px 0;
+  color:#8799b3;font-size:10px}
+.neuro-command-footer>span{display:flex;align-items:center;gap:8px}
+.neuro-command-footer button{display:flex;align-items:center;gap:7px;border:none;background:transparent;color:#b5a6ff;font-size:10px;cursor:pointer}
+.neuro-empty{font-size:11px;color:#96a7be;padding:28px 10px}
+.theme-miniature{display:inline-block;margin-left:auto;width:40px;height:28px;border:1px solid #9b9fbf;border-radius:5px}
+.theme-miniature-dark{background:linear-gradient(130deg,#0d1422 42%,#2d3752 42%,#2d3752 52%,#8e81ee 52%,#181d2d 62%)}
+.theme-miniature-light{background:linear-gradient(135deg,#e6eef0 45%,#f6fbf9 45%,#f6fbf9 63%,#39917d 63%,#fff 73%)}
+.theme-dark .neuro-command-dashboard{box-shadow:0 23px 55px #0006}
+.theme-dark .neuro-command-dashboard .primary{background:linear-gradient(110deg,#8b7aeb,#6458cd);border-color:#8b7aeb}
+.theme-dark .neuro-command-dashboard .outline{background:#242d43;border-color:#51607b}
+.theme-dark .neuro-command-dashboard .outline:hover{background:#313c56}
+
+/* Light mode remains a full, accessible scientific workspace. */
+.theme-light .neuro-command-dashboard{box-shadow:0 12px 34px #13273e32}
+.theme-light .neuro-command-dashboard .primary{background:#7763d2;border-color:#7763d2}
+.theme-light .neuro-command-dashboard .outline{background:#25314a;color:#e8f0ff;border-color:#64718e}
+
+button:focus-visible,input:focus-visible,select:focus-visible,
+.neuro-band-card:focus-visible{outline:2px solid #99cfff!important;outline-offset:3px}
+@media(max-width:1200px){.neuro-command-primary{grid-template-columns:1fr 1fr}.neuro-band-card{padding:11px}
+  .neuro-band-card>strong{font-size:17px}}
+@media(max-width:980px){.neuro-command-primary{grid-template-columns:1fr}.neuro-brain-panel{min-height:300px}
+  .neuro-brain-art{min-height:220px}.neuro-brain-art svg{max-height:270px}
+  .neuro-command-right{grid-template-columns:1fr 1fr;grid-template-rows:auto}
+  .neuro-wave-rows{height:auto}.neuro-band-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:640px){.neuro-command-dashboard{padding:11px}.neuro-command-header{flex-direction:column;align-items:stretch}
+  .neuro-command-header h2{font-size:20px}.neuro-command-actions{width:100%}.neuro-command-actions button{flex:1}
+  .neuro-command-right{grid-template-columns:1fr}.neuro-band-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .neuro-brain-panel{min-height:250px}.neuro-brain-art{min-height:195px}
+  .neuro-brain-art svg{max-height:226px}.neuro-band-card>strong{font-size:19px}
+  .neuro-command-footer{flex-wrap:wrap}.neuro-wave-row{grid-template-columns:82px minmax(0,1fr)}
+  .theme-dark .top-right{gap:7px}.theme-dark .personalization-button{padding:7px!important}}
+@media(prefers-reduced-motion:reduce){.neuro-band-card,.theme-dark .nav-link{transition:none}}
