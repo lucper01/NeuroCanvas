@@ -61,3 +61,32 @@ button.primary,button.outline{border-radius:9px;display:inline-flex;align-items:
 .qc-table tbody tr:hover{background:#f0f7ee}
 .qc-table tr.qc-flagged{background:#fff6ec}
 @media(max-width:750px){.personalization-button span:not(.language-mini){display:none}.preferences-panel{padding:17px}.qc-stats{gap:6px}.qc-stats>div{padding:8px}.qc-stats strong{font-size:15px}}
+
+
+/* Trigger & Epoch Studio, responsive codebook, pulse inspector and trial plots. */
+.trigger-studio{min-width:0}
+.trigger-intro{background:#e9f4ec;border:1px solid #cfe5d3;padding:18px 21px;border-radius:12px;display:flex;gap:14px;align-items:center;margin:0 0 18px;color:#227151}
+.trigger-intro div{flex:1}
+.trigger-intro strong{font-family:Manrope,sans-serif;color:#194a39;font-size:16px}
+.trigger-intro p{margin:5px 0 0;font-size:11px;color:#5e8170}
+.trigger-chip{background:#e0f0e4;border-radius:30px;padding:6px 9px;font-size:9px;color:#28694e;font-weight:800;letter-spacing:1px}
+.trigger-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:15px 0}
+.trigger-stats>div{border:1px solid #e0ebe3;background:#f7faf7;border-radius:10px;padding:13px}
+.trigger-stats strong{display:block;color:#286f52;font-size:22px;font-family:Manrope,sans-serif}
+.trigger-stats small{display:block;color:#81988a;font-size:10px;margin-top:5px}
+.trigger-chips{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+.trigger-chips span{border:1px solid #d6e6d8;background:#f3f8f3;color:#3d7258;border-radius:6px;padding:7px 10px;font-size:10px}
+.trigger-table{overflow:auto;max-height:440px;border:1px solid #dfebe2;border-radius:10px;margin:14px 0}
+.trigger-table.small{max-height:290px}
+.trigger-table table{width:100%;border-collapse:collapse;min-width:690px}
+.trigger-table th{position:sticky;top:0;background:#edf5ee;color:#446f57;z-index:2;text-align:left;font-size:10px;letter-spacing:.2px;padding:11px}
+.trigger-table td{padding:9px 11px;border-bottom:1px solid #ebf1eb;color:#446456;font-size:11px}
+.trigger-table td strong{font-size:11px}
+.trigger-table input:not([type=checkbox]){width:100%;border:1px solid #dce9dd;border-radius:7px;padding:8px 10px;background:#fff;color:#2e5c45;font-size:11px;min-width:135px}
+.trigger-table input[type=checkbox]{accent-color:#2a8261}
+.trigger-studio .toolbar{align-items:flex-end}
+.trigger-studio .toolbar label{max-width:260px}
+.trigger-studio .toolbar label input{max-width:220px}
+.trigger-group{background:#f7faf7;padding:13px;border-radius:10px;border:1px solid #e4eee5}
+.trigger-plot{width:100%;min-height:290px;overflow:hidden}
+@media(max-width:650px){.trigger-stats{gap:6px}.trigger-stats>div{padding:10px 7px}.trigger-stats strong{font-size:18px}.trigger-intro{padding:13px}.trigger-studio .toolbar label{max-width:100%}}
