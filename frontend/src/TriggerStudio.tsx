@@ -104,6 +104,7 @@ const EN: Record<string,string> = {
   'Choisir une condition et calculer ses époques pour annoter chaque essai.':
     'Select a condition and compute epochs to review individual trials.',
   'Aucun essai disponible dans la période sélectionnée.':'No trials available in the selected time range.',
+  'Carte thermique des essais':'Trial heatmap',
   'Essai individuel':'Single trial',
   'Essais précédents':'Previous trials',
   'Essais suivants':'Next trials',
@@ -184,6 +185,33 @@ function ScientificPlot({ x, series, title, yTitle }: {
   },[x,series,title,yTitle])
   return <div className="trigger-plot" ref={el}/>
 }
+function EpochHeatmap({ epochs, title }: { epochs: ConditionEpochs; title: string }) {
+  const target=useRef<HTMLDivElement>(null)
+  useEffect(()=>{
+    const node=target.current
+    if(!node || !epochs.trials.length)return
+    void Plotly.react(node,[{
+      type:'heatmap',
+      x:epochs.trial_time,
+      y:epochs.trials.map(trial=>trial.event_index+1),
+      z:epochs.trials.map(trial=>trial.signal),
+      colorscale:'RdBu',reversescale:true,
+      colorbar:{title:{text:epochs.unit}},
+      hovertemplate:'t=%{x:.3f} s<br>trial=%{y}<br>amplitude=%{z:.5g}<extra></extra>'
+    }],{
+      autosize:true,height:Math.min(560,Math.max(310,epochs.trials.length*4+140)),
+      paper_bgcolor:'#fff',plot_bgcolor:'#fff',
+      title:{text:title,font:{size:13}},
+      margin:{l:70,r:24,t:48,b:52},
+      xaxis:{title:{text:'Time (s)'}},
+      yaxis:{title:{text:'Trial index'},autorange:'reversed'},
+      font:{size:11,color:'#60736a'}
+    },{responsive:true,displaylogo:false})
+    return ()=>{Plotly.purge(node)}
+  },[epochs,title])
+  return <div className="trigger-heatmap" ref={target}/>
+}
+
 export default function TriggerStudio({
   info,record,remote,locale,setRecord,setRemoteInfo,success,error
 }:Props){
@@ -555,6 +583,8 @@ export default function TriggerStudio({
           ...(averaged.sem?[{name:'+SEM',values:averaged.mean.map((y,i)=>y+averaged.sem![i]),dash:'dot'},
             {name:'−SEM',values:averaged.mean.map((y,i)=>y-averaged.sem![i]),dash:'dot'}]:[])
         ]}/>
+        {averaged.trials.length>1&&<EpochHeatmap epochs={averaged}
+          title={t('Carte thermique des essais')}/>}
         {averaged.trials.length>0&&<><div className="toolbar"><label>{t('Essai individuel')}
           <select value={trialIndex} onChange={e=>setTrialIndex(Number(e.target.value))}>
             {averaged.trials.map((trial,i)=><option value={i} key={i}>
