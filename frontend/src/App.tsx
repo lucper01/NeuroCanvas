@@ -13,8 +13,9 @@ import { loadPreferences, savePreferences, resolveLanguage, localizeTree } from 
 import type { Preferences } from './localization'
 import { demo, importCSV, applySteps, viewport, spectrum, spectrogram, erp, fourier } from './engine'
 import { api } from './api'
+import TriggerStudio from './TriggerStudio'
 
-type Section = 'overview' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'advanced' | 'artifact' | 'learning' | 'export' | 'help'
+type Section = 'overview' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'advanced' | 'artifact' | 'triggers' | 'learning' | 'export' | 'help'
 const TABS: { id: Section; title: string; subtitle: string; icon: typeof Activity }[] = [
   { id: 'overview', title: 'Overview', subtitle: 'Tableau de bord', icon: Layers3 },
   { id: 'explorer', title: 'Signal Explorer', subtitle: 'Exploration temporelle', icon: Activity },
@@ -23,6 +24,7 @@ const TABS: { id: Section; title: string; subtitle: string; icon: typeof Activit
   { id: 'physiology', title: 'Neurophysiology', subtitle: 'ERP & biosignaux', icon: HeartPulse },
   { id: 'advanced', title: 'Advanced Analysis', subtitle: 'MNE · ICA · QC · HRV', icon: BrainCircuit },
   { id: 'artifact', title: 'Artifact Review', subtitle: 'Contrôle qualité et exclusions', icon: ShieldCheck },
+  { id: 'triggers', title: 'Trigger & Epoch Studio', subtitle: 'Événements et conditions', icon: Activity },
   { id: 'learning', title: 'Learning Studio', subtitle: 'Simulation pédagogique', icon: FlaskConical },
   { id: 'export', title: 'Export & Reproducibility', subtitle: 'Exports & provenance', icon: FileDown },
   { id: 'help', title: 'Documentation', subtitle: 'Méthodes & limites', icon: CircleHelp }
@@ -553,7 +555,7 @@ export default function App() {
               </div></Panel></div>
         </>}
 
-        {['explorer', 'processing', 'frequency', 'physiology', 'advanced', 'artifact'].includes(tab) && <div className="data-bar">
+        {['explorer', 'processing', 'frequency', 'physiology', 'advanced', 'artifact', 'triggers'].includes(tab) && <div className="data-bar">
           <div><span className="tiny-label">ENREGISTREMENT ACTIF</span><strong>{selectedLabel}</strong>
             <small>{format(info?.duration || 0, 2)} s · {channels.length} canaux · {format(sfreq, 2)} Hz</small></div>
           <button className="outline small" onClick={() => fileInput.current?.click()}><FileUp size={15}/> Changer de fichier</button>
@@ -803,6 +805,12 @@ export default function App() {
               {!badChannels.length && <span>Aucun canal marqué.</span>}</div>
           </Panel>
         </>}
+
+        {tab === 'triggers' && info && <TriggerStudio
+          key={remote || info.name + '-' + info.samples}
+          info={info} record={record} remote={remote} locale={locale}
+          setRecord={setRecord} setRemoteInfo={setRemoteInfo}
+          success={success} error={error}/>}
 
         {tab === 'learning' && <>
           <Panel title="Signal synthesis laboratory" description="Manipuler des paramètres et voir leurs conséquences sur l'activité synthétique">
