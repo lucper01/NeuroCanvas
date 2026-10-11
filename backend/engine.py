@@ -110,17 +110,21 @@ def load_recording(path: Path, sfreq: float | None, workdir: Path):
         }), None)
         inferred = None
         if time_col is not None:
-            times = pd.to_numeric(df.pop(time_col), errors="raise").to_numpy(dtype=float)
+            times = pd.to_numeric(df.pop(time_col).astype(str).str.replace(",", ".", regex=False),
+                                  errors="raise").to_numpy(dtype=float)
             intervals = np.diff(times)
             if len(intervals) and np.all(np.isfinite(intervals)) and np.all(intervals > 0):
                 delta = float(np.median(intervals))
                 if np.allclose(intervals, delta, rtol=0.02, atol=1e-7):
                     inferred = 1.0 / delta
+        if time_col is not None and inferred is None:
+            raise ValueError("Time column is not strictly increasing and uniformly sampled. Resample before import.")
         if sfreq is None:
             if inferred is None:
                 raise ValueError("CSV without a uniform time_s column requires sampling_rate.")
             sfreq = inferred
-        numeric = df.apply(pd.to_numeric, errors="coerce")
+        numeric = df.apply(lambda col: pd.to_numeric(
+            col.astype(str).str.replace(",", ".", regex=False), errors="coerce"))
         if numeric.isna().all(axis=0).any():
             raise ValueError("CSV contains a fully nonnumeric signal column.")
         data = numeric.to_numpy(dtype=float).T
@@ -128,6 +132,8 @@ def load_recording(path: Path, sfreq: float | None, workdir: Path):
                         ["misc"] * len(numeric.columns), ["a.u."] * len(numeric.columns), ext[1:])
         if inferred is not None and sfreq is not None and abs(float(sfreq) - inferred) / inferred > 0.02:
             rec.warnings.append("Provided sampling rate differs from time-column sampling rate.")
+        if time_col is not None and len(times) and abs(times[0]) > 1e-9:
+            rec.warnings.append("Nonzero CSV time origin: displayed sample times start at 0 s.")
         return rec
 
     if ext == ".acq":
