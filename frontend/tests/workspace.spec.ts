@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test('interactive workspace navigation, spectra and export', async ({ page, isMobile }) => {
   await page.goto('/')
   await expect(page).toHaveTitle(/NeuroCanvas/)
-  await expect(page.getByRole('heading', { name: 'Votre espace d'exploration des signaux' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: "Votre espace d'exploration des signaux" })).toBeVisible()
   await expect(page.getByText('Démonstration physiologique synthétique', { exact: true })).toBeVisible()
 
   const navigate = async (title: string) => {
@@ -43,5 +43,5 @@ test('offline-compatible CSV import without backend', async ({ page, isMobile })
   await expect(page.getByText('synthetic.csv', { exact: true }).first()).toBeVisible()
   if (isMobile) await page.getByRole('button', { name: 'Menu', exact: true }).click()
   await page.getByRole('button', { name: 'Export & Reproducibility' }).click()
-  await expect(page.getByRole('heading', { name: 'Historique de l'enregistrement' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: "Historique de l'enregistrement" })).toBeVisible()
 })
