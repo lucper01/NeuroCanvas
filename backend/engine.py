@@ -29,6 +29,8 @@ class Recording:
     warnings: list[str] = field(default_factory=list)
     steps: list[dict] = field(default_factory=list)
     processed: np.ndarray | None = None
+    bad_channels: list[str] = field(default_factory=list)
+    bad_segments: list[dict] = field(default_factory=list)
 
     def __post_init__(self):
         self.original = np.asarray(self.original, dtype=np.float64)
@@ -63,6 +65,8 @@ class Recording:
                 for n, t, u in zip(self.names, self.types, self.units)
             ], "source": self.source, "events": self.events,
             "warnings": sorted(set(self.warnings)), "history": self.steps,
+            "bad_channels": list(self.bad_channels),
+            "bad_segments": [dict(segment) for segment in self.bad_segments],
         }
 
 
@@ -315,11 +319,13 @@ def spectrogram(rec: Recording, channel: str, start: float = 0, duration: float 
 
 
 def evoked(rec: Recording, channel: str, label: str, tmin: float = -0.2, tmax: float = 0.8,
-           baseline_end: float = 0):
+           baseline_end: float = 0, exclude_marked: bool = False):
     if channel not in rec.names or tmin >= tmax:
         raise ValueError("Invalid channel or epoch window.")
     if not tmin <= baseline_end <= tmax:
         raise ValueError("Baseline end is outside epoch.")
+    if exclude_marked and channel in rec.bad_channels:
+        raise ValueError("This channel is marked bad. Unmark it or choose a different channel.")
     start_samp, end_samp = int(round(tmin * rec.sfreq)), int(round(tmax * rec.sfreq))
     times = np.arange(start_samp, end_samp + 1) / rec.sfreq
     episodes = []
@@ -330,6 +336,13 @@ def evoked(rec: Recording, channel: str, label: str, tmin: float = -0.2, tmax: f
         onset = int(round(float(ev["time"]) * rec.sfreq))
         i, j = onset + start_samp, onset + end_samp + 1
         if i < 0 or j > rec.original.shape[1]:
+            excluded += 1
+            continue
+        if exclude_marked and any(
+            float(mark["start"]) < j / rec.sfreq
+            and float(mark["end"]) > i / rec.sfreq
+            for mark in rec.bad_segments
+        ):
             excluded += 1
             continue
         segment = rec.processed[rec.names.index(channel), i:j].copy()
@@ -343,7 +356,8 @@ def evoked(rec: Recording, channel: str, label: str, tmin: float = -0.2, tmax: f
     return {"time": times.tolist(), "mean": epochs.mean(axis=0).tolist(),
             "sem": (epochs.std(axis=0, ddof=1) / np.sqrt(len(epochs))).tolist()
                    if len(epochs) > 1 else [None] * len(times),
-            "n": len(epochs), "excluded": excluded, "unit": rec.units[rec.names.index(channel)]}
+            "n": len(epochs), "excluded": excluded, "unit": rec.units[rec.names.index(channel)],
+            "exclude_marked": bool(exclude_marked)}
 
 
 def physiology(rec: Recording, channel: str, modality: str):
