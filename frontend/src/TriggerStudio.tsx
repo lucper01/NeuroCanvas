@@ -95,6 +95,10 @@ const EN: Record<string,string> = {
     'Select a condition and compute epochs to review individual trials.',
   'Aucun essai disponible dans la période sélectionnée.':'No trials available in the selected time range.',
   'Essai individuel':'Single trial',
+  'Essais précédents':'Previous trials',
+  'Essais suivants':'Next trials',
+  'Essais affichés':'Displayed trials',
+  'Paramètres du calcul':'Analysis parameters',
   'Moyenne par condition':'Condition average',
   'Époque individuelle':'Single epoch',
   'Exporter les événements CSV':'Export event CSV',
@@ -199,6 +203,10 @@ export default function TriggerStudio({
   const [measurementEnd,setMeasurementEnd]=useState(.3)
   const [metrics,setMetrics]=useState<ConditionMetrics|null>(null)
   const [averaged,setAveraged]=useState<ConditionEpochs|null>(null)
+  const [epochSnapshot,setEpochSnapshot]=useState<{
+    channel:string;condition:string;tmin:number;tmax:number;baselineEnd:number;
+    excludeMarked:boolean;excludeRejected:boolean
+  }|null>(null)
   const [comparisons,setComparisons]=useState<ConditionEpochs[]>([])
   const [trialIndex,setTrialIndex]=useState(0)
   const importRef=useRef<HTMLInputElement>(null)
@@ -259,19 +267,31 @@ export default function TriggerStudio({
     setGroupName('')
     success(t('Enregistrer les changements avant l’analyse.'))
   }
-  const compute=async(compareAll=false)=>{
+  const compute=async(compareAll=false, pageOffset=0)=>{
     setBusy(true)
     try{
+      const options=pageOffset>0 && epochSnapshot ? epochSnapshot : {
+        channel:analysisChannel,condition:viewCondition,tmin,tmax,baselineEnd,
+        excludeMarked,excludeRejected
+      }
       if(compareAll){
         if(!availableConditions.length)throw Error(t('Aucun dictionnaire de codes.'))
-        const output=await Promise.all(availableConditions.slice(0,12).map(condition=>remote?
-          api.triggerEpochs(remote,analysisChannel,condition,tmin,tmax,baselineEnd,excludeMarked,excludeRejected):
-          Promise.resolve(conditionEpochs(record,analysisChannel,condition,tmin,tmax,baselineEnd,excludeMarked,excludeRejected))))
-        setComparisons(output);setAveraged(null)
+        const batch=await Promise.allSettled(availableConditions.slice(0,12).map(condition=>remote?
+          api.triggerEpochs(remote,options.channel,condition,options.tmin,options.tmax,
+            options.baselineEnd,options.excludeMarked,options.excludeRejected,0,1):
+          Promise.resolve(conditionEpochs(record,options.channel,condition,
+            options.tmin,options.tmax,options.baselineEnd,options.excludeMarked,options.excludeRejected,0,1))))
+        const output=batch.filter((result):result is PromiseFulfilledResult<ConditionEpochs>=>
+          result.status==='fulfilled').map(result=>result.value)
+        if(!output.length)throw Error(t('Aucune époque valide pour cette condition.'))
+        setComparisons(output);setAveraged(null);setEpochSnapshot(null)
       }else{
-        const result=remote?await api.triggerEpochs(remote,analysisChannel,viewCondition,tmin,tmax,baselineEnd,excludeMarked,excludeRejected):
-          conditionEpochs(record,analysisChannel,viewCondition,tmin,tmax,baselineEnd,excludeMarked,excludeRejected)
-        setAveraged(result);setComparisons([]);setTrialIndex(0)
+        const result=remote?await api.triggerEpochs(remote,options.channel,options.condition,
+          options.tmin,options.tmax,options.baselineEnd,options.excludeMarked,
+          options.excludeRejected,pageOffset,100):
+          conditionEpochs(record,options.channel,options.condition,options.tmin,options.tmax,
+            options.baselineEnd,options.excludeMarked,options.excludeRejected,pageOffset,100)
+        setAveraged(result);setComparisons([]);setTrialIndex(0);setEpochSnapshot(options)
       }
       success(t('Époques calculées'))
     }catch(e){error(e)}finally{setBusy(false)}
@@ -288,8 +308,9 @@ export default function TriggerStudio({
   const exportEpochs=()=>{
     if(!averaged){error(t('Aucun essai calculé.'));return}
     try{
-      if(remote)window.open(api.triggerEpochURL(remote,analysisChannel,viewCondition,tmin,tmax,
-        baselineEnd,excludeMarked,excludeRejected),'_blank','noopener,noreferrer')
+      const cfg=epochSnapshot
+      if(remote && cfg)window.open(api.triggerEpochURL(remote,cfg.channel,cfg.condition,cfg.tmin,cfg.tmax,
+        cfg.baselineEnd,cfg.excludeMarked,cfg.excludeRejected),'_blank','noopener,noreferrer')
       else csvDownload('neurocanvas_epochs.csv',epochCSV(averaged))
     }catch(e){error(e)}
   }
@@ -321,9 +342,9 @@ export default function TriggerStudio({
   }
   const exportMetrics=()=>{
     if(!metrics){error(t('Calculer les mesures'));return}
-    if(remote)window.open(api.conditionMetricsURL(remote,analysisChannel,tmin,tmax,
-      measurementStart,measurementEnd,baselineEnd,excludeMarked,excludeRejected),
-      '_blank','noopener,noreferrer')
+    if(remote)window.open(api.conditionMetricsURL(remote,metrics.channel,metrics.tmin,metrics.tmax,
+      metrics.measurement_window[0],metrics.measurement_window[1],metrics.baseline_end,
+      metrics.exclude_marked,metrics.exclude_rejected),'_blank','noopener,noreferrer')
     else csvDownload('neurocanvas_condition_metrics.csv',metricsCSV(metrics))
   }
   const exportReviews=()=>{
@@ -469,6 +490,17 @@ export default function TriggerStudio({
           <select value={trialIndex} onChange={e=>setTrialIndex(Number(e.target.value))}>
             {averaged.trials.map((trial,i)=><option value={i} key={i}>
               {i+1} · {trial.meaning} · {trial.time.toFixed(3)} s</option>)}</select></label></div>
+          <div className="toolbar trial-pagination">
+            <button className="outline" disabled={busy || (averaged.trial_offset||0)===0}
+              onClick={()=>void compute(false,Math.max(0,(averaged.trial_offset||0)-100))}>
+              {t('Essais précédents')}</button>
+            <small>{t('Essais affichés')}: {(averaged.trial_offset||0)+1} –
+              {(averaged.trial_offset||0)+averaged.trials.length} / {averaged.n}</small>
+            <button className="outline" disabled={busy || averaged.next_offset===null ||
+              averaged.next_offset===undefined}
+              onClick={()=>void compute(false,averaged.next_offset||0)}>
+              {t('Essais suivants')}</button>
+          </div>
           <ScientificPlot title={t('Époque individuelle')} x={averaged.trial_time}
             yTitle={averaged.unit} series={[{name:t('Essai individuel'),
               values:averaged.trials[Math.min(trialIndex,averaged.trials.length-1)].signal}]}/>
@@ -492,7 +524,10 @@ export default function TriggerStudio({
           </div></>}
         <button className="primary" onClick={exportEpochs}><Download size={15}/>{t('Exporter les époques CSV')}</button>
         {remote && <button className="outline" onClick={() => window.open(api.triggerNPZURL(
-          remote,viewCondition,tmin,tmax,baselineEnd,excludeMarked,excludeRejected),'_blank','noopener,noreferrer')}>
+          remote,epochSnapshot?.condition||viewCondition,epochSnapshot?.tmin??tmin,
+          epochSnapshot?.tmax??tmax,epochSnapshot?.baselineEnd??baselineEnd,
+          epochSnapshot?.excludeMarked??excludeMarked,
+          epochSnapshot?.excludeRejected??excludeRejected),'_blank','noopener,noreferrer')}>
           <Download size={15}/>{t('Exporter toutes les voies (NPZ)')}</button>}
         <p className="note">{t('Les essais visibles sont un aperçu ; les exports Python sont en pleine résolution.')}</p>
       </div>}
