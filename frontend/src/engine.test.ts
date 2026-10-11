@@ -6,7 +6,7 @@ describe('NeuroCanvas browser signal engine', () => {
     const a = demo(250, 40, 10, 1)
     const b = demo(250, 40, 10, 1)
     expect(a.info.samples).toBe(10000)
-    expect(a.info.channels).toHaveLength(6)
+    expect(a.info.channels).toHaveLength(7)
     expect(a.info.events).toHaveLength(7)
     expect(a.raw[0].slice(0, 20)).toEqual(b.raw[0].slice(0, 20))
   })
