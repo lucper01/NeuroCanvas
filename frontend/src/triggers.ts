@@ -32,17 +32,21 @@ export function validateDefinitions(definitions: TriggerDefinition[]): TriggerDe
 }
 
 export function detectTriggers(rec: LocalRecording, channel: string,
-                               minWidthMs = 0, minIntervalMs = 0, tolerance = .25): TriggerPreview {
+                               minWidthMs = 0, minIntervalMs = 0, tolerance = .25, bitMask: number | null = null): TriggerPreview {
   const index = rec.info.channels.findIndex(c=>c.name===channel)
   if (index < 0) throw Error('Canal de triggers inconnu.')
   if (!(minWidthMs >= 0 && minWidthMs <= 1000) || !(minIntervalMs >= 0 && minIntervalMs <= 5000) ||
-      !(tolerance >= 0 && tolerance <= .49)) throw Error('Paramètres de détection invalides.')
+      !(tolerance >= 0 && tolerance <= .49) ||
+      (bitMask !== null && (!Number.isInteger(bitMask)||bitMask < 1||bitMask > 16777215)))
+    throw Error('Paramètres de détection invalides.')
   const values = rec.raw[index], fs = rec.info.sfreq
   const minWidth = Math.max(1, Math.ceil(minWidthMs * fs / 1000))
   const minSpacing = Math.ceil(minIntervalMs * fs / 1000)
-  const codeFor = (value: number): number =>
-    Number.isFinite(value) && Math.abs(value - Math.round(value)) <= tolerance &&
-    value > 0 && value < 16777216 ? Math.round(value) : 0
+  const codeFor = (value: number): number => {
+    const raw = Number.isFinite(value) && Math.abs(value - Math.round(value)) <= tolerance &&
+      value > 0 && value < 16777216 ? Math.round(value) : 0
+    return bitMask === null ? raw : (raw & bitMask)
+  }
   const events: MappedTrigger[] = []
   let start = 0, previous = codeFor(values[0]), lastAccepted = -Infinity
   let shortRejected = 0, intervalRejected = 0
