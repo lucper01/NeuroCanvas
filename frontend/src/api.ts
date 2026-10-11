@@ -45,5 +45,33 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ time, label, duration: 0 })
   }),
   csvURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/export/csv',
+  editChannel: (id: string, index: number, type: string, unit: string) =>
+    call<RecordingInfo>('/sessions/' + encoded(id) + '/channels/' + index, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, unit })
+    }),
+  quality: (id: string) => call<{ channels: Record<string, string | number | boolean>[]; flags: string[] }>(
+    '/sessions/' + encoded(id) + '/quality'),
+  fft: (id: string, channel: string, start: number, duration: number) =>
+    call<{ frequency: number[]; amplitude: number[]; unit: string; method: string }>(
+      '/sessions/' + encoded(id) + '/fft?channel=' + encoded(channel) + '&start=' + start + '&duration=' + duration),
+  coherence: (id: string, first: string, second: string, start: number, duration: number) =>
+    call<{ frequency: number[]; coherence: number[]; first: string; second: string; description: string }>(
+      '/sessions/' + encoded(id) + '/coherence?first=' + encoded(first) + '&second=' + encoded(second) +
+      '&start=' + start + '&duration=' + duration),
+  mnePSD: (id: string, start: number, duration: number) =>
+    call<{ channels: string[]; frequency: number[]; power: number[][]; unit: string; method: string }>(
+      '/sessions/' + encoded(id) + '/mne/psd?start=' + start + '&duration=' + duration),
+  mneEpochs: (id: string, label: string) =>
+    call<{ time: number[]; channels: string[]; average: number[][]; n: number; excluded: number; unit: string }>(
+      '/sessions/' + encoded(id) + '/mne/epochs?label=' + encoded(label)),
+  montage: (id: string) =>
+    call<{ channels: { name: string; x: number; y: number; z: number }[]; montage: string; warning: string }>(
+      '/sessions/' + encoded(id) + '/mne/montage'),
+  ica: (id: string, count = 10) =>
+    call<{ component_count: number; explained_variance_ratio: Record<string, number>; warning: string }>(
+      '/sessions/' + encoded(id) + '/mne/ica?n_components=' + count),
+  hrv: (id: string, channel: string) =>
+    call<{ channel: string; features: Record<string, number | null>; r_peaks: number[]; warning: string }>(
+      '/sessions/' + encoded(id) + '/neurokit/hrv?channel=' + encoded(channel)),
   remove: (id: string) => call<{ deleted: boolean }>('/sessions/' + encoded(id), { method: 'DELETE' })
 }
