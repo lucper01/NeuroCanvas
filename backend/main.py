@@ -19,11 +19,29 @@ from engine import (Recording, load_recording, viewport, power_spectrum, spectro
 
 app = FastAPI(title="NeuroCanvas local scientific engine", version="0.1.0",
               description="Local exploratory biosignal processing. Not for clinical use.")
-app.add_middleware(CORSMiddleware, allow_origins=[
+TRUSTED_ORIGINS = [
     "http://localhost:5173", "http://127.0.0.1:5173",
     "http://localhost:4173", "http://127.0.0.1:4173",
     "https://lucper01.github.io",
-], allow_credentials=False, allow_methods=["GET", "POST", "DELETE"], allow_headers=["Content-Type"])
+]
+app.add_middleware(
+    CORSMiddleware, allow_origins=TRUSTED_ORIGINS,
+    allow_credentials=False, allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Access-Control-Request-Private-Network"],
+)
+
+
+@app.middleware("http")
+async def loopback_private_network_preflight(request, call_next):
+    """Permit Chrome Local Network Access preflight only from trusted UI origins.
+
+    Not an authentication substitute: this API must remain bound to 127.0.0.1.
+    """
+    response = await call_next(request)
+    if (request.headers.get("origin") in TRUSTED_ORIGINS
+            and request.headers.get("access-control-request-private-network") == "true"):
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
 SESSIONS: dict[str, Recording] = {}
 MAX_UPLOAD = 150 * 1024 * 1024
 
