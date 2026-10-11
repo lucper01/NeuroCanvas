@@ -4,9 +4,10 @@ import type { ReactElement, ReactNode } from 'react'
 export type LanguagePreference = 'auto' | 'fr' | 'en'
 export type Language = 'fr' | 'en'
 export type DisplayDensity = 'standard' | 'compact'
-export type Preferences = { language: LanguagePreference; density: DisplayDensity }
+export type VisualTheme = 'dark' | 'light'
+export type Preferences = { language: LanguagePreference; density: DisplayDensity; theme: VisualTheme }
 export const PREFERENCE_KEY = 'neurocanvas.preferences.v1'
-export const DEFAULT_PREFERENCES: Preferences = { language: 'auto', density: 'standard' }
+export const DEFAULT_PREFERENCES: Preferences = { language: 'auto', density: 'standard', theme: 'dark' }
 
 export function loadPreferences(): Preferences {
   try {
@@ -18,7 +19,8 @@ export function loadPreferences(): Preferences {
     return {
       language: obj.language === 'fr' || obj.language === 'en' || obj.language === 'auto' ?
         obj.language : 'auto',
-      density: obj.density === 'compact' ? 'compact' : 'standard'
+      density: obj.density === 'compact' ? 'compact' : 'standard',
+      theme: obj.theme === 'light' ? 'light' : 'dark'
     }
   } catch { return { ...DEFAULT_PREFERENCES } }
 }
@@ -39,6 +41,18 @@ export function resolveLanguage(preference: LanguagePreference, browserLanguage?
  */
 const PAIRS: [string, string][] = [
   ['Personnalisation', 'Personalization'],
+  ['Apparence', 'Appearance'],
+  ['Thème visuel', 'Visual theme'],
+  ['Sombre', 'Dark'],
+  ['Clair', 'Light'],
+  ['Tableau de bord scientifique', 'Scientific dashboard'],
+  ['Vue spectrale', 'Spectral overview'],
+  ['Puissance par bande', 'Band power'],
+  ['Signaux actifs', 'Active signals'],
+  ['Vue neuroscientifique', 'Neuroscience overview'],
+  ['Données synthétiques', 'Synthetic data'],
+  ['Données acquises', 'Recorded data'],
+  ['Thème sombre inspiré de la neuro-imagerie, optimisé pour les courbes.','Neuroimaging-inspired dark theme, optimized for waveforms.'],
   ['Langue', 'Language'],
   ['Langue de l’interface', 'Interface language'],
   ['Langue détectée', 'Detected language'],
