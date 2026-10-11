@@ -6,7 +6,7 @@ test.describe('Internationalization and personalization', () => {
     await page.goto('/')
     await expect(page.getByRole('button', { name: /Personalization/ })).toBeVisible()
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
-    await expect(page.getByRole('button', { name: /Explore signals/ })).toBeVisible()
+    await expect(page.locator('.neuro-command-dashboard').getByRole('button', { name: 'Import' })).toBeVisible()
     await page.getByRole('button', { name: /Personalization/ }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
