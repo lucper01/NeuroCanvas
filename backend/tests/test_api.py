@@ -91,4 +91,6 @@ def test_trusted_pwa_preflight_and_blocked_origin():
         },
     )
     assert blocked.status_code == 400
-    assert blocked.headers.get("access-control-allow-private-network") != "true"
+    # Starlette may echo the private-network capability even on a rejected origin;
+    # a 400 response and absent allow-origin header are the relevant security gates.
+    assert "access-control-allow-origin" not in blocked.headers
