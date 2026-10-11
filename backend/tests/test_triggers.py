@@ -131,3 +131,13 @@ def test_api_detect_preview_commit_and_csv_export():
     assert definitions.status_code==200
     assert len(definitions.json()["trigger_definitions"])==2
     assert client.delete(root).status_code==200
+
+
+def test_bitmask_decodes_embedded_status_bits():
+    rec=build()
+    rec.original[1,250:253] = 0x10000 + 11
+    plain=detect_triggers(rec,"Status")
+    masked=detect_triggers(rec,"Status",bit_mask=0xffff)
+    assert plain["counts"].get("65547")==1
+    assert masked["counts"].get("11")==2
+    assert masked["events"][0]["time"]==1.0
