@@ -234,8 +234,10 @@ export default function App() {
             name: record.info.channels[i].name, unit: record.info.channels[i].unit,
             type: record.info.channels[i].type,
             mean: row.reduce((a,b)=>a+b,0)/row.length,
-            min: Math.min(...row.slice(0,100000)), max: Math.max(...row.slice(0,100000)),
-            ptp: Math.max(...row.slice(0,100000))-Math.min(...row.slice(0,100000)),
+            min: row.slice(0,100000).reduce((a,b)=>Math.min(a,b),Infinity),
+            max: row.slice(0,100000).reduce((a,b)=>Math.max(a,b),-Infinity),
+            ptp: row.slice(0,100000).reduce((a,b)=>Math.max(a,b),-Infinity) -
+              row.slice(0,100000).reduce((a,b)=>Math.min(a,b),Infinity),
             rms: Math.sqrt(row.reduce((a,b)=>a+b*b,0)/row.length)
           }))
           setAdvancedOutput({ channels:rows, flags:['Aperçu QC local : l’étendue est calculée sur les 100 000 premiers points.'] })
