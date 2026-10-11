@@ -149,7 +149,10 @@ def mne_epochs(recording, label, tmin=-.2, tmax=.8, baseline_end=0,
 def head_positions(recording):
     """Standard 10-20 positions for matching channel names; not measured electrode positions."""
     import mne
-    montage = mne.channels.make_standard_montage("standard_1020")
+    try:
+        montage = mne.channels.make_standard_montage("colin27_1020")
+    except ValueError:
+        montage = mne.channels.make_standard_montage("standard_1020")
     positions = {key.lower(): val for key, val in montage.get_positions()["ch_pos"].items()}
     channels = []
     for name, kind in zip(recording.names, recording.types):
