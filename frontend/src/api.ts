@@ -100,11 +100,12 @@ export const api = {
       '/sessions/' + encoded(id) + '/triggers/events?condition=' + encoded(condition)),
   triggerEpochs: (id: string, channel: string, condition: string, tmin: number,
                   tmax: number, baselineEnd: number, excludeMarked: boolean,
-                  excludeRejected = false) =>
+                  excludeRejected = false, trialOffset = 0, trialLimit = 100) =>
     call<import('./types').ConditionEpochs>('/sessions/' + encoded(id) + '/triggers/epochs?' +
       new URLSearchParams({channel,condition,tmin:String(tmin),tmax:String(tmax),
         baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked),
-        exclude_rejected:String(excludeRejected)}).toString()),
+        exclude_rejected:String(excludeRejected),trial_offset:String(trialOffset),
+        trial_limit:String(trialLimit)}).toString()),
   triggerEventURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/triggers/export/events',
   triggerCodebookURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/triggers/export/codebook',
   triggerNPZURL: (id: string, condition: string, tmin: number, tmax: number,
