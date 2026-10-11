@@ -67,8 +67,31 @@ function Plot({ traces, title, xTitle = 'Temps (s)', yTitle, shapes, heatmap = f
   }, [traces, title, xTitle, yTitle, shapes, heatmap, height, theme])
   const savePlot = async (format: 'png' | 'svg') => {
     if (!div.current) return
-    try { await Plotly.downloadImage(div.current, { format, filename: 'neurocanvas_figure', height, width: 1200, scale: format === 'png' ? 2 : 1 }) }
-    catch { /* Browser export can fail under strict CSP or embedded webviews. */ }
+    const node=div.current
+    let changed=false
+    try {
+      if (theme==='dark') {
+        await Plotly.relayout(node,{
+          paper_bgcolor:'#ffffff',plot_bgcolor:'#ffffff',
+          'font.color':'#304354','title.font.color':'#304354',
+          'xaxis.gridcolor':'#e5eaf0','yaxis.gridcolor':'#e5eaf0',
+          'xaxis.linecolor':'#b9c8d7'
+        })
+        changed=true
+      }
+      await Plotly.downloadImage(node,{format,filename:'neurocanvas_scientific_figure',
+        height,width:1200,scale:format==='png'?2:1})
+    } catch { /* Browser image export is optional and may be blocked by embedded webviews. */ }
+    finally {
+      if (changed) {
+        await Plotly.relayout(node,{
+          paper_bgcolor:'#151c2a',plot_bgcolor:'#151c2a',
+          'font.color':'#a6b7d2','title.font.color':'#e9f2ff',
+          'xaxis.gridcolor':'#293548','yaxis.gridcolor':'#293548',
+          'xaxis.linecolor':'#3d4a60'
+        }).catch(()=>{})
+      }
+    }
   }
   return <div className="plot-wrap"><div className="plot-actions">
     <button type="button" className="tiny" onClick={() => void savePlot('png')}>PNG</button>
