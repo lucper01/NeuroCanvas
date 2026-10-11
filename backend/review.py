@@ -108,7 +108,7 @@ def condition_metrics(recording, channel, tmin=-.2, tmax=.8,
         sub = values[selection]
         t = times[selection]
         peak_index = int(np.argmax(np.abs(sub)))
-        area = float(np.trapz(sub, t)) if len(t) > 1 else 0.0
+        area = float(np.trapezoid(sub, t)) if len(t) > 1 else 0.0
         output.append({
             "condition": condition,
             "status": "ok",
