@@ -14,10 +14,13 @@ The project is general-purpose and independent of any single experiment or resea
 | Frequency Lab | Single-sided FFT amplitude spectrum, Welch PSD, spectrograms and numerical integration of canonical EEG frequency bands |
 | Neurophysiology Lab | Event-aligned averages with SEM; dedicated ECG, EDA, respiration, EMG, PPG and EOG signal processing using NeuroKit2 |
 | Advanced Analysis | Channel QC, magnitude-squared coherence, MNE multichannel PSD and epochs, 10–20 montage preview, exploratory ICA and NeuroKit2 HRV |
-| Learning Studio | Seeded synthetic EEG, ECG, EDA, respiration and EMG demonstrations with adjustable oscillation frequency and signal noise |
+| Artifact Review | Non-destructive manual bad-channel and bad-interval review, descriptive window metrics and optional rejection of marked epochs |
+| Trigger & Epoch Studio | Detect coded TTL/status pulses, decode optional acquisition bit masks, maintain code meanings, group multiple codes into experimental conditions, plot trial means and export condition-aligned epochs |
+| Internationalization | Automatic French/English interface by browser language, manual overrides and compact/standard display personalization |
+| Learning Studio | Seeded synthetic EEG, ECG, EDA, respiration, EMG and trigger-code demonstrations with adjustable oscillation frequency and signal noise |
 | Export & Reproducibility | Processed CSV, machine-readable provenance JSON, self-contained local session JSON, scientific PNG/SVG charts and processing history |
 
-**Browser mode** can open CSV/TSV, load/save local JSON sessions, generate demonstrations and run fast exploratory analysis without a server. **Python mode** enables additional file formats and specialized biomedical algorithms. Python analysis runs **on the user's own computer**, not on GitHub Pages.
+**Browser mode** can open CSV/TSV, load/save local JSON sessions, generate demonstrations, identify coded trigger pulses, group trial events and run fast exploratory analysis without a server. **Python mode** enables additional file formats and specialized biomedical algorithms. Python analysis runs **on the user's own computer**, not on GitHub Pages.
 
 ## Data support
 
@@ -40,6 +43,8 @@ time_s,Fz,Cz,ECG
 0.004,0.000002,0.000001,0.3
 0.008,0.000001,-0.000001,0.4
 ```
+
+For a quick trigger demonstration, open Learning Studio and load the synthetic recording: it includes a **TRIGGER TTL** channel with codes 11, 12, 21 and 22 and preconfigured Visual/Auditory conditions. In Trigger & Epoch Studio, preview and confirm pulses, modify condition groupings and compute epochs aligned to each trigger. Do not infer hardware trigger timing from these synthetic signals.
 
 No automatic calibration or guessing of unit scaling is applied to generic CSV data. Assign sensor types and units explicitly, verifying that the **underlying numerical values already match the declared units**. EEG analyzed by MNE is internally represented in volts.
 
@@ -112,7 +117,7 @@ GitHub Pages serves the **frontend only**. Advanced analysis requires the separa
 - Standard 10–20 electrode positions are approximate templates, not measured electrode coordinates.
 - The project is **not medical software** and must not be used to diagnose or treat patients.
 
-See [VALIDATION.md](docs/VALIDATION.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [ROADMAP.md](docs/ROADMAP.md).
+See [VALIDATION.md](docs/VALIDATION.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md), [TRIGGERS.md](docs/TRIGGERS.md), [INTERNATIONALIZATION.md](docs/INTERNATIONALIZATION.md) and [ROADMAP.md](docs/ROADMAP.md).
 
 ## Testing
 
