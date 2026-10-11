@@ -145,3 +145,20 @@ def test_http_trial_review_and_metrics_csv():
     })
     assert client.get(root + "/trials/review").json()["reviewed"] == []
     client.delete(root)
+
+
+
+def test_trial_pages_share_the_same_condition_average():
+    rec = sample_recording()
+    first = condition_epochs(rec, "EEG Fz", "Visual", -.2, .8,
+                             max_trials=1, trial_offset=0)
+    second = condition_epochs(rec, "EEG Fz", "Visual", -.2, .8,
+                              max_trials=1, trial_offset=1)
+    assert first["n"] == 3
+    assert len(first["trials"]) == len(second["trials"]) == 1
+    assert first["trials"][0]["event_uid"] != second["trials"][0]["event_uid"]
+    assert first["next_offset"] == 1
+    assert second["next_offset"] == 2
+    assert first["mean"] == second["mean"]
+    assert first["trials"][0]["event_index"] == 0
+    assert second["trials"][0]["event_index"] == 1
