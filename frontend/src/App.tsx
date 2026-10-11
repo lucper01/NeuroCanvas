@@ -4,20 +4,21 @@ import Plotly from 'plotly.js-dist-min'
 import {
   Activity, BrainCircuit, ChartNoAxesCombined, CircleHelp, ClipboardList,
   Database, Download, FileDown, FileUp, Filter, FlaskConical, HeartPulse, Info,
-  Layers3, Menu, Monitor, Plus, RefreshCw, RotateCcw, Save,
+  Layers3, Menu, Monitor, Plus, RefreshCw, RotateCcw, Save, Settings2,
   ShieldCheck, SlidersHorizontal, Sparkles, Trash2, Wifi, WifiOff, X
 } from 'lucide-react'
 import type { Evoked, LocalRecording, RecordingInfo, Spectrum, Step, TimeFrequency, Trace } from './types'
-import { demo, importCSV, applySteps, viewport, spectrum, spectrogram, erp } from './engine'
+import { demo, importCSV, applySteps, viewport, spectrum, spectrogram, erp, fourier } from './engine'
 import { api } from './api'
 
-type Section = 'overview' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'learning' | 'export' | 'help'
+type Section = 'overview' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'advanced' | 'learning' | 'export' | 'help'
 const TABS: { id: Section; title: string; subtitle: string; icon: typeof Activity }[] = [
   { id: 'overview', title: 'Overview', subtitle: 'Tableau de bord', icon: Layers3 },
   { id: 'explorer', title: 'Signal Explorer', subtitle: 'Exploration temporelle', icon: Activity },
   { id: 'processing', title: 'Signal Processing', subtitle: 'Pipeline non destructif', icon: SlidersHorizontal },
   { id: 'frequency', title: 'Frequency Lab', subtitle: 'Spectres & temps-fréquence', icon: ChartNoAxesCombined },
   { id: 'physiology', title: 'Neurophysiology', subtitle: 'ERP & biosignaux', icon: HeartPulse },
+  { id: 'advanced', title: 'Advanced Analysis', subtitle: 'MNE · ICA · QC · HRV', icon: BrainCircuit },
   { id: 'learning', title: 'Learning Studio', subtitle: 'Simulation pédagogique', icon: FlaskConical },
   { id: 'export', title: 'Export & Reproducibility', subtitle: 'Exports & provenance', icon: FileDown },
   { id: 'help', title: 'Documentation', subtitle: 'Méthodes & limites', icon: CircleHelp }
@@ -96,6 +97,8 @@ export default function App() {
   const [compare, setCompare] = useState(false)
   const [traces, setTraces] = useState<Trace[]>([])
   const [psd, setPsd] = useState<Spectrum | null>(null)
+  const [fftData, setFftData] = useState<{ frequency: number[]; amplitude: number[]; unit: string; method: string } | null>(null)
+  const [spectralMethod, setSpectralMethod] = useState<'PSD' | 'FFT'>('PSD')
   const [tfr, setTfr] = useState<TimeFrequency | null>(null)
   const [evoked, setEvoked] = useState<Evoked | null>(null)
   const [physio, setPhysio] = useState<{ summary: Record<string, number>; markers: Record<string, number[]>; series: { name: string; time: number[]; values: (number | null)[] }[] } | null>(null)
@@ -110,6 +113,11 @@ export default function App() {
   const [alpha, setAlpha] = useState(10)
   const [noise, setNoise] = useState(1)
   const [showTfr, setShowTfr] = useState(false)
+  const [advancedMode, setAdvancedMode] = useState('quality')
+  const [advancedOutput, setAdvancedOutput] = useState<Record<string, unknown> | null>(null)
+  const [altChannel, setAltChannel] = useState('EEG Cz')
+  const [editType, setEditType] = useState('eeg')
+  const [editUnit, setEditUnit] = useState('µV')
   const fileInput = useRef<HTMLInputElement>(null)
   const sessionInput = useRef<HTMLInputElement>(null)
   const { notice, setNotice, error, success } = useNotice()
@@ -135,7 +143,7 @@ export default function App() {
     setChannel(newInfo.channels[0]?.name || '')
     setStart(0); setDuration(Math.min(10, newInfo.duration || 10))
     setEventLabel(newInfo.events[0]?.label || 'stimulus')
-    setTraces([]); setPsd(null); setTfr(null); setEvoked(null); setPhysio(null)
+    setTraces([]); setPsd(null); setFftData(null); setTfr(null); setEvoked(null); setPhysio(null); setAdvancedOutput(null)
   }
   const loadDemo = () => { const rec = demo(250, 40, alpha, noise); activate(rec.info, null, rec); success('Démonstration synthétique chargée.') }
   const loadPythonDemo = async () => {
@@ -191,12 +199,16 @@ export default function App() {
       const win = Math.max(.1, Math.min(duration, info.duration - start))
       const spectrumResult = remote ? await api.spectrum(remote, channel, start, win) : spectrum(record, channel, start, win)
       setPsd(spectrumResult)
+      if (spectralMethod === 'FFT') {
+        const fftResult = remote ? await api.fft(remote, channel, start, win) : fourier(record, channel, start, win)
+        setFftData(fftResult)
+      } else setFftData(null)
       if (showTfr) {
         const tf = remote ? await api.spectrogram(remote, channel, start, win) : spectrogram(record, channel, start, win)
         setTfr(tf)
       } else setTfr(null)
-    } catch (e) { if (tab === 'frequency') error(e); setPsd(null); setTfr(null) }
-  }, [remote, channel, record, info, start, duration, showTfr, tab, error])
+    } catch (e) { if (tab === 'frequency') error(e); setPsd(null); setFftData(null); setTfr(null) }
+  }, [remote, channel, record, info, start, duration, showTfr, spectralMethod, tab, error])
   useEffect(() => { if (tab === 'frequency' || tab === 'overview') void loadSpectral() }, [loadSpectral, tab])
 
   const loadERP = async () => {
@@ -211,6 +223,45 @@ export default function App() {
     try { setPhysio(await api.physiology(remote, channel, physiologyType)); success('NeuroKit2 : analyse terminée.') }
     catch (e) { error(e) } finally { setBusy(false) }
   }
+  const runAdvanced = async () => {
+    setBusy(true); setAdvancedOutput(null)
+    try {
+      const win = Math.max(.5, Math.min(duration, (info?.duration || 0) - start))
+      if (advancedMode === 'quality') {
+        if (remote) setAdvancedOutput(await api.quality(remote) as unknown as Record<string, unknown>)
+        else {
+          const rows = record.processed.map((row, i) => ({
+            name: record.info.channels[i].name, unit: record.info.channels[i].unit,
+            type: record.info.channels[i].type,
+            mean: row.reduce((a,b)=>a+b,0)/row.length,
+            min: Math.min(...row.slice(0,100000)), max: Math.max(...row.slice(0,100000)),
+            ptp: Math.max(...row.slice(0,100000))-Math.min(...row.slice(0,100000)),
+            rms: Math.sqrt(row.reduce((a,b)=>a+b*b,0)/row.length)
+          }))
+          setAdvancedOutput({ channels:rows, flags:['Aperçu QC local : l’étendue est calculée sur les 100 000 premiers points.'] })
+        }
+      } else if (!remote) throw Error('Cette analyse avancée nécessite le moteur Python local.')
+      else if (advancedMode === 'coherence') setAdvancedOutput(await api.coherence(remote, channel, altChannel, start, win))
+      else if (advancedMode === 'mne-psd') setAdvancedOutput(await api.mnePSD(remote, start, win))
+      else if (advancedMode === 'mne-epochs') setAdvancedOutput(await api.mneEpochs(remote, eventLabel))
+      else if (advancedMode === 'montage') setAdvancedOutput(await api.montage(remote))
+      else if (advancedMode === 'ica') setAdvancedOutput(await api.ica(remote, 10))
+      else if (advancedMode === 'hrv') setAdvancedOutput(await api.hrv(remote, channel))
+      success('Analyse avancée exécutée.')
+    } catch (e) { error(e) } finally { setBusy(false) }
+  }
+  const editChannelMetadata = async () => {
+    const idx = channels.findIndex(ch => ch.name === channel)
+    if (idx < 0) { error('Canal absent.'); return }
+    try {
+      if (remote) setRemoteInfo(await api.editChannel(remote, idx, editType, editUnit))
+      else setRecord(old => ({ ...old, info: { ...old.info,
+        channels: old.info.channels.map((c,i)=>i===idx?{...c,type:editType,unit:editUnit}:c),
+        warnings:[...old.info.warnings,'Métadonnées éditées : valeurs numériques NON converties.'] } }))
+      success('Classification et unité déclarée modifiées, sans recalibrage numérique.')
+    } catch (e) { error(e) }
+  }
+
   const addStep = async () => {
     const newStep: Step = { method: stepType, channels: [...selection] }
     if (stepType === 'filter') {
@@ -370,7 +421,7 @@ export default function App() {
               </div></Panel></div>
         </>}
 
-        {['explorer', 'processing', 'frequency', 'physiology'].includes(tab) && <div className="data-bar">
+        {['explorer', 'processing', 'frequency', 'physiology', 'advanced'].includes(tab) && <div className="data-bar">
           <div><span className="tiny-label">ENREGISTREMENT ACTIF</span><strong>{selectedLabel}</strong>
             <small>{format(info?.duration || 0, 2)} s · {channels.length} canaux · {format(sfreq, 2)} Hz</small></div>
           <button className="outline small" onClick={() => fileInput.current?.click()}><FileUp size={15}/> Changer de fichier</button>
@@ -446,16 +497,22 @@ export default function App() {
               {channels.map(ch => <option key={ch.name}>{ch.name}</option>)}</select></label>
               <label>Début (s)<input type="number" value={start} min="0" step=".1" onChange={e=>setStart(Number(e.target.value))}/></label>
               <label>Durée (s)<input type="number" value={duration} min=".1" step=".1" onChange={e=>setDuration(Number(e.target.value))}/></label>
+              <label>Méthode<select value={spectralMethod} onChange={e=>setSpectralMethod(e.target.value as 'PSD' | 'FFT')}>
+                <option value="PSD">Welch · PSD</option><option value="FFT">Fourier · amplitude</option>
+              </select></label>
               <label className="toggle"><input type="checkbox" checked={showTfr} onChange={e=>setShowTfr(e.target.checked)}/> Spectrogramme</label>
               <button className="outline" onClick={() => void loadSpectral()}><RefreshCw size={15}/> Actualiser</button>
             </div>
-            {psd && <Plot title="Power spectral density (Welch)" xTitle="Fréquence (Hz)" yTitle={'PSD (' + psd.unit + ')'}
+            {psd && spectralMethod === 'PSD' && <Plot title="Power spectral density (Welch)" xTitle="Fréquence (Hz)" yTitle={'PSD (' + psd.unit + ')'}
               traces={[{ type:'scatter', mode:'lines', x: psd.frequency, y: psd.psd, name: channel, line: { color: COLORS[0], width: 2 },
                 fill:'tozeroy', fillcolor:'rgba(24,125,104,.09)' }]} height={365}/>}
+            {fftData && spectralMethod === 'FFT' && <Plot title="FFT · spectre d'amplitude" xTitle="Fréquence (Hz)" yTitle={'Amplitude (' + fftData.unit + ')'}
+              traces={[{ type:'scatter', mode:'lines', x:fftData.frequency, y:fftData.amplitude, name:channel,
+                line:{ color:COLORS[0], width:1.5 } }]} height={365}/>}
             {tfr && <Plot title="Spectrogramme" xTitle="Temps (s)" yTitle="Fréquence (Hz)" heatmap height={390}
               traces={[{ type:'heatmap', x:tfr.time, y:tfr.frequency, z:tfr.power, colorscale:'Viridis',
                 colorbar: { title: { text: tfr.unit } } }]}/>}
-            <p className="note">{psd ? psd.method + ' ; fenêtre de ' + psd.nperseg + ' échantillons.' : 'Sélectionner une fenêtre temporelle et un canal.'}
+            <p className="note">{spectralMethod === 'FFT' ? (fftData?.method || 'FFT') : (psd ? psd.method + ' ; fenêtre de ' + psd.nperseg + ' échantillons.' : 'Sélectionner une fenêtre temporelle et un canal.')}
               {' '}Les puissances dépendent des unités et du référencement des données.</p>
           </Panel>
           <Panel title="EEG band power" description="Intégration numérique de la PSD selon les intervalles classiques (interprétation EEG uniquement)">
@@ -499,6 +556,44 @@ export default function App() {
               line:{color:COLORS[0]} }]} height={235}/>)}
           </Panel>}
         </div>}
+
+        {tab === 'advanced' && <>
+          <Panel title="Advanced scientific analysis" description="Contrôles qualité, connectivité spectrale, analyses MNE et variabilité cardiaque">
+            <div className="toolbar"><label>Analyse<select value={advancedMode} onChange={e => { setAdvancedMode(e.target.value); setAdvancedOutput(null) }}>
+              <option value="quality">Quality control · tous signaux</option>
+              <option value="coherence">Coherence · deux canaux</option>
+              <option value="mne-psd">MNE · PSD EEG multicanal</option>
+              <option value="mne-epochs">MNE · Epochs & Evoked EEG</option>
+              <option value="montage">MNE · Montage 10-20 standard</option>
+              <option value="ica">MNE · ICA exploratory preview</option>
+              <option value="hrv">NeuroKit2 · HRV à partir ECG</option>
+            </select></label>
+            {['coherence','hrv'].includes(advancedMode) && <label>Canal<select value={channel} onChange={e=>setChannel(e.target.value)}>
+              {channels.map(c=><option key={c.name}>{c.name}</option>)}</select></label>}
+            {advancedMode === 'coherence' && <label>Second canal<select value={altChannel} onChange={e=>setAltChannel(e.target.value)}>
+              {channels.map(c=><option key={c.name}>{c.name}</option>)}</select></label>}
+            {advancedMode === 'mne-epochs' && <label>Événement<select value={eventLabel} onChange={e=>setEventLabel(e.target.value)}>
+              {[...new Set(events.map(e=>e.label))].map(x=><option key={x}>{x}</option>)}</select></label>}
+            <button className="primary" disabled={busy || (!connected && advancedMode !== 'quality')}
+              onClick={() => void runAdvanced()}><BrainCircuit size={16}/> Lancer l’analyse</button>
+          </div>
+          {!remote && <p className="note">Importer les données via le moteur Python local pour accéder aux analyses MNE et NeuroKit2. Un aperçu QC peut fonctionner directement dans le navigateur.</p>}
+          {advancedOutput ? <AdvancedResults mode={advancedMode} output={advancedOutput}/>
+            : <div className="empty-state"><BrainCircuit size={28}/><h3>Scientific analysis workspace</h3>
+              <p>Sélectionner une méthode, contrôler les métadonnées et lancer les calculs.</p></div>}
+        </Panel>
+        <Panel title="Channel classification & units" description="Assigner les types de capteurs et unités nécessaires aux analyses scientifiques">
+          <div className="toolbar"><label>Canal<select value={channel} onChange={e=>setChannel(e.target.value)}>{channels.map(c=><option key={c.name}>{c.name}</option>)}</select></label>
+            <label>Type<select value={editType} onChange={e=>setEditType(e.target.value)}>
+              {['eeg','eog','ecg','emg','resp','misc','stim','bio','seeg','ecog'].map(x=><option key={x}>{x}</option>)}
+            </select></label>
+            <label>Unité déclarée<select value={editUnit} onChange={e=>setEditUnit(e.target.value)}>
+              {['V','mV','µV','a.u.','µS','°C','%','bpm'].map(x=><option key={x}>{x}</option>)}
+            </select></label><button className="outline" onClick={() => void editChannelMetadata()}><Settings2 size={15}/> Mettre à jour</button>
+          </div>
+          <p className="note"><strong>Attention :</strong> changer une unité dans ces métadonnées ne multiplie pas les valeurs par un facteur de conversion. Les données CSV doivent déjà être exprimées dans l’unité choisie. Les fonctions MNE acceptent les voies EEG annotées en V, mV ou µV.</p>
+        </Panel>
+        </>}
 
         {tab === 'learning' && <>
           <Panel title="Signal synthesis laboratory" description="Manipuler des paramètres et voir leurs conséquences sur l'activité synthétique">
@@ -574,4 +669,55 @@ export default function App() {
 function Metric({ title, value, sub, icon }: { title: string; value: string; sub: string; icon: ReactNode }) {
   return <div className="metric"><div className="metric-head"><span>{title}</span><span className="metric-icon">{icon}</span></div>
     <strong>{value}</strong><small>{sub}</small></div>
+}
+
+
+function AdvancedResults({ mode, output }: { mode: string; output: Record<string, unknown> }) {
+  if (mode === 'quality') {
+    const rows = (output.channels || []) as Record<string, string | number | boolean>[]
+    return <div><div className="scroll-table"><table><thead><tr><th>Canal</th><th>Type</th><th>Unité</th><th>Moyenne</th><th>RMS</th><th>Amplitude P–P</th></tr></thead>
+      <tbody>{rows.map((row,i)=><tr key={i}><td>{String(row.name)}</td><td>{String(row.type)}</td><td>{String(row.unit)}</td>
+        <td>{format(Number(row.mean),4)}</td><td>{format(Number(row.rms),4)}</td><td>{format(Number(row.ptp),4)}</td></tr>)}</tbody></table></div>
+      <p className="note">{((output.flags || []) as string[]).join(' ')}</p></div>
+  }
+  if (mode === 'coherence') {
+    const d = output as { frequency: number[]; coherence: number[]; first: string; second: string; description: string }
+    return <div><Plot title={'Coherence · '+d.first+' / '+d.second} xTitle="Fréquence (Hz)" yTitle="Cohérence magnitude²"
+      traces={[{ type:'scatter', mode:'lines', x:d.frequency, y:d.coherence, line:{color:COLORS[0],width:2} }]} />
+      <p className="note">{d.description}</p></div>
+  }
+  if (mode === 'mne-psd') {
+    const d = output as { frequency: number[]; channels: string[]; power: number[][]; unit: string; method: string }
+    return <Plot title="PSD EEG multicanal · MNE" xTitle="Fréquence (Hz)" yTitle={d.unit}
+      traces={d.channels.slice(0,8).map((name,i)=>({ type:'scatter', mode:'lines', x:d.frequency, y:d.power[i],
+        name, line:{color:COLORS[i%COLORS.length],width:1.7} }))} height={430}/>
+  }
+  if (mode === 'mne-epochs') {
+    const d = output as { time: number[]; channels: string[]; average: number[][]; n: number; excluded: number; unit: string }
+    return <div><p className="result-info">{d.n} époques retenues · {d.excluded} exclues</p>
+      <Plot title="MNE · Evoked EEG" xTitle="Temps relatif (s)" yTitle={d.unit}
+        traces={d.channels.slice(0,8).map((name,i)=>({type:'scatter',mode:'lines',name,x:d.time,y:d.average[i],
+          line:{color:COLORS[i%COLORS.length]}}))} height={420}/></div>
+  }
+  if (mode === 'montage') {
+    const d = output as { channels: { name:string; x:number; y:number }[]; warning:string }
+    return <div><Plot title="Positions des électrodes (template standard_1020)" xTitle="Gauche ↔ droite (normalisé)" yTitle="Postérieur ↔ antérieur (normalisé)"
+      traces={[{ type:'scatter', mode:'markers+text', x:d.channels.map(x=>x.x), y:d.channels.map(x=>x.y),
+        text:d.channels.map(x=>x.name), textposition:'top center', marker:{size:9,color:COLORS[0]} }]} />
+      <p className="note">{d.warning}</p></div>
+  }
+  if (mode === 'ica') {
+    const d = output as { component_count:number; explained_variance_ratio:Record<string,number>; warning:string }
+    return <div className="summary-list"><div><span>Composantes calculées</span><strong>{d.component_count}</strong></div>
+      {Object.entries(d.explained_variance_ratio || {}).map(([key,value])=><div key={key}><span>Variance expliquée · {key}</span><strong>{format(value*100,2)} %</strong></div>)}
+      <p className="note">{d.warning}</p></div>
+  }
+  if (mode === 'hrv') {
+    const d = output as { features:Record<string,number|null>; r_peaks:number[]; warning:string }
+    return <div><div className="result-info">{d.r_peaks.length} pics R détectés</div>
+      <div className="scroll-table"><table><thead><tr><th>Paramètre NeuroKit2</th><th>Valeur</th></tr></thead>
+        <tbody>{Object.entries(d.features).map(([name,value])=><tr key={name}><td>{name}</td><td>{value===null?'NA':format(value,5)}</td></tr>)}</tbody></table></div>
+      <p className="note">{d.warning}</p></div>
+  }
+  return <pre className="code-preview">{JSON.stringify(output,null,2)}</pre>
 }
