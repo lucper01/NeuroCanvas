@@ -199,8 +199,13 @@ def apply_pipeline(rec: Recording, steps: list[dict]):
     fs = rec.sfreq
     for step in steps:
         method = step.get("method")
-        picks = step.get("channels") or rec.names
-        indices = [rec.names.index(n) for n in picks if n in rec.names]
+        picks = rec.names if "channels" not in step else step["channels"]
+        if not isinstance(picks, list):
+            raise ValueError("Step channels must be a list of names.")
+        unknown = [name for name in picks if name not in rec.names]
+        if unknown:
+            raise ValueError("Unknown step channel: " + ", ".join(map(str, unknown)))
+        indices = [rec.names.index(n) for n in picks]
         if not indices:
             raise ValueError("No matching channels for processing.")
         if method == "filter":
