@@ -9,6 +9,7 @@ import { api } from './api'
 import { commitTriggers, conditionEpochs, detectTriggers, epochCSV, eventCode,
   eventCSV, mapTrigger, validateDefinitions, setLocalTrialDecision } from './triggers'
 import { summarizeConditions, metricsCSV } from './conditionMetrics'
+import { createAnalysisProtocol, parseAnalysisProtocol } from './analysisProtocol'
 
 type Props = {
   info: RecordingInfo
@@ -23,6 +24,15 @@ type Props = {
 
 const EN: Record<string,string> = {
   'Canal de triggers':'Trigger channel',
+  'Protocole d’analyse':'Analysis protocol',
+  'Nom du protocole':'Protocol name',
+  'Exporter le protocole':'Export protocol',
+  'Importer un protocole':'Import protocol',
+  'Protocole importé : confirmer le dictionnaire pour appliquer les correspondances.':
+    'Protocol loaded: save the codebook to apply trigger mappings.',
+  'Protocole exporté':'Protocol exported',
+  'Les protocoles enregistrent les réglages et la signification des triggers, jamais les signaux ou les données personnelles.':
+    'Protocols preserve analysis settings and trigger meanings, never samples or personal data.',
   'Masque de bits':'Bit mask',
   'Aucun masque':'No mask',
   'Détection depuis le signal brut':'Detection from raw samples',
@@ -210,6 +220,8 @@ export default function TriggerStudio({
   const [comparisons,setComparisons]=useState<ConditionEpochs[]>([])
   const [trialIndex,setTrialIndex]=useState(0)
   const importRef=useRef<HTMLInputElement>(null)
+  const protocolRef=useRef<HTMLInputElement>(null)
+  const [protocolName,setProtocolName]=useState('Generic event analysis')
 
   const codes = useMemo(()=>[...new Set([
     ...info.events.map(e=>eventCode(e)).filter((n):n is number=>n!==null),
@@ -356,6 +368,48 @@ export default function TriggerStudio({
       warning:'Manual trial decisions, original samples never modified.'
     },null,2),'application/json')
   }
+  const exportProtocol=()=>{
+    try{
+      const p=createAnalysisProtocol({
+        name:protocolName,
+        detection:{
+          channel:sourceChannel,min_width_ms:widthMs,min_interval_ms:intervalMs,
+          tolerance,bit_mask:bitMask==='none'?null:Number(bitMask)
+        },
+        codebook:validateDefinitions(definitions),
+        epoch:{
+          channel:analysisChannel,tmin,tmax,baseline_end:baselineEnd,
+          measurement_start:measurementStart,measurement_end:measurementEnd,
+          exclude_marked:excludeMarked,exclude_rejected:excludeRejected
+        }
+      })
+      csvDownload('neurocanvas_analysis_protocol.json',JSON.stringify(p,null,2),'application/json')
+      success(t('Protocole exporté'))
+    }catch(e){error(e)}
+  }
+  const importProtocol=async(file:File)=>{
+    try{
+      const obj=parseAnalysisProtocol(JSON.parse(await file.text()) as unknown)
+      setProtocolName(obj.name)
+      const detector=obj.detection
+      setSourceChannel(info.channels.some(ch=>ch.name===detector.channel)?
+        detector.channel : (info.channels.find(ch=>ch.type==='stim')?.name || sourceChannel))
+      setWidthMs(detector.min_width_ms);setIntervalMs(detector.min_interval_ms)
+      setTolerance(detector.tolerance);setBitMask(detector.bit_mask===null?
+        'none':String(detector.bit_mask))
+      setDefinitions(obj.codebook)
+      setAnalysisChannel(info.channels.some(ch=>ch.name===obj.epoch.channel)?
+        obj.epoch.channel:(info.channels.find(ch=>ch.type==='eeg')?.name||analysisChannel))
+      setTmin(obj.epoch.tmin);setTmax(obj.epoch.tmax)
+      setBaselineEnd(obj.epoch.baseline_end)
+      setMeasurementStart(obj.epoch.measurement_start)
+      setMeasurementEnd(obj.epoch.measurement_end)
+      setExcludeMarked(obj.epoch.exclude_marked)
+      setExcludeRejected(obj.epoch.exclude_rejected)
+      setAveraged(null);setMetrics(null);setComparisons([]);setPreview(null)
+      success(t('Protocole importé : confirmer le dictionnaire pour appliquer les correspondances.'))
+    }catch(e){error(e)}
+  }
   const importCodebook=async (file:File)=>{
     try{
       const data:unknown=JSON.parse(await file.text())
@@ -370,6 +424,21 @@ export default function TriggerStudio({
     <div className="trigger-intro"><Activity size={23}/><div><strong>Trigger & Epoch Studio</strong>
       <p>{t('Détection et signification des triggers, création de conditions et découpage de signaux')}</p></div>
       <span className="trigger-chip">{remote?'PYTHON':'BROWSER'}</span></div>
+
+    <section className="panel">
+      <div className="panel-heading"><div><h3>00 · {t('Protocole d’analyse')}</h3>
+        <p>{t('Les protocoles enregistrent les réglages et la signification des triggers, jamais les signaux ou les données personnelles.')}</p></div></div>
+      <div className="toolbar">
+        <label>{t('Nom du protocole')}<input type="text" value={protocolName}
+          maxLength={120} onChange={e=>setProtocolName(e.target.value)}/></label>
+        <button className="outline" onClick={exportProtocol}>
+          <Download size={15}/>{t('Exporter le protocole')}</button>
+        <button className="outline" onClick={()=>protocolRef.current?.click()}>
+          <FileUp size={15}/>{t('Importer un protocole')}</button>
+        <input type="file" hidden ref={protocolRef} accept=".json,application/json"
+          onChange={e=>{const file=e.target.files?.[0];if(file)void importProtocol(file);e.target.value=''}}/>
+      </div>
+    </section>
 
     <section className="panel">
       <div className="panel-heading"><div><h3>01 · {t('Détection depuis le signal brut')}</h3>
