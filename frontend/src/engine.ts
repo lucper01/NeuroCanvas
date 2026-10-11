@@ -274,3 +274,30 @@ export function erp(rec: LocalRecording, channel: string, label: string, tmin = 
     }),
     n: trials.length, excluded, unit: rec.info.channels[idx].unit }
 }
+
+
+/** Single-sided amplitude spectrum: Hann window with coherent-gain correction. */
+export function fourier(rec: LocalRecording, channel: string, start = 0, duration = 30) {
+  const idx = rec.info.channels.findIndex(ch => ch.name === channel)
+  if (idx < 0) throw Error('Canal inconnu.')
+  const fs = rec.info.sfreq
+  const row = rec.processed[idx].slice(Math.floor(start * fs),
+    Math.min(rec.info.samples, Math.floor((start + duration) * fs)))
+  if (row.length < 16) throw Error('Au moins 16 échantillons sont nécessaires.')
+  // Use the largest power-of-two segment fitting the selected time window.
+  let n = 1
+  while (n * 2 <= row.length && n < 131072) n *= 2
+  const windowed = row.slice(0, n)
+  const avg = windowed.reduce((a, b) => a + b, 0) / n
+  const w = windowed.map((_, i) => .5 - .5 * Math.cos(2 * Math.PI * i / (n - 1)))
+  const gain = w.reduce((a, b) => a + b, 0)
+  const result = fft(windowed.map((v, i) => (v - avg) * w[i]))
+  const frequency: number[] = [], amplitude: number[] = []
+  for (let i = 0; i <= n / 2; i++) {
+    frequency.push(i * fs / n)
+    const multiplier = i === 0 || i === n / 2 ? 1 : 2
+    amplitude.push(multiplier * Math.hypot(result.re[i], result.im[i]) / gain)
+  }
+  return { frequency, amplitude, unit: rec.info.channels[idx].unit,
+    method: 'FFT, Hann coherent gain, segment power-of-two / browser' }
+}
