@@ -194,3 +194,71 @@ def delete_session(key: str):
     session_or_404(key)
     del SESSIONS[key]
     return {"deleted": True}
+
+
+# Extended signal analysis API (no component rejection is performed automatically).
+from advanced import (
+    quality_report, fft_amplitude, coherence_report, mne_power, mne_epochs,
+    head_positions, ica_preview, nk_hrv,
+)
+
+
+class ChannelEdit(BaseModel):
+    type: str
+    unit: str = Field(min_length=1, max_length=30)
+
+
+@app.put("/api/sessions/{key}/channels/{index}")
+def edit_channel(key: str, index: int, body: ChannelEdit):
+    rec = session_or_404(key)
+    valid = {"eeg", "eog", "ecg", "emg", "misc", "stim", "resp", "bio", "seeg", "ecog"}
+    if index < 0 or index >= len(rec.names):
+        raise HTTPException(404, "Unknown channel index.")
+    if body.type not in valid:
+        raise HTTPException(422, "Unsupported channel type.")
+    rec.types[index] = body.type
+    rec.units[index] = body.unit
+    rec.warnings.append("User-assigned sensor metadata: values were not rescaled. Verify the numeric unit.")
+    return rec.metadata()
+
+
+@app.get("/api/sessions/{key}/quality")
+def quality(key: str):
+    return guard(lambda: quality_report(session_or_404(key)))
+
+
+@app.get("/api/sessions/{key}/fft")
+def fft(key: str, channel: str, start: float = 0, duration: float = 30):
+    return guard(lambda: fft_amplitude(session_or_404(key), channel, start, duration))
+
+
+@app.get("/api/sessions/{key}/coherence")
+def coherence(key: str, first: str, second: str, start: float = 0, duration: float = 30):
+    return guard(lambda: coherence_report(session_or_404(key), first, second, start, duration))
+
+
+@app.get("/api/sessions/{key}/mne/psd")
+def mne_psd(key: str, start: float = 0, duration: float = 30, fmin: float = 1, fmax: float = 45):
+    return guard(lambda: mne_power(session_or_404(key), start, duration, fmin, fmax))
+
+
+@app.get("/api/sessions/{key}/mne/epochs")
+def mne_erp(key: str, label: str, tmin: float = -.2, tmax: float = .8,
+            reject_peak_uv: float | None = None):
+    return guard(lambda: mne_epochs(session_or_404(key), label, tmin, tmax,
+                                    reject_peak_uv=reject_peak_uv))
+
+
+@app.get("/api/sessions/{key}/mne/montage")
+def montage(key: str):
+    return guard(lambda: head_positions(session_or_404(key)))
+
+
+@app.get("/api/sessions/{key}/mne/ica")
+def ica(key: str, n_components: int = Query(10, ge=2, le=20)):
+    return guard(lambda: ica_preview(session_or_404(key), n_components))
+
+
+@app.get("/api/sessions/{key}/neurokit/hrv")
+def hrv(key: str, channel: str):
+    return guard(lambda: nk_hrv(session_or_404(key), channel))
