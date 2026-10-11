@@ -89,10 +89,11 @@ export const api = {
       body:JSON.stringify({definitions})
     }),
   triggerDetect: (id: string, channel: string, minWidthMs = 0, minIntervalMs = 0,
-                  tolerance = .25, commit = false) =>
+                  tolerance = .25, commit = false, bitMask: number | null = null) =>
     call<import('./types').TriggerPreview>('/sessions/' + encoded(id) + '/triggers/detect', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({channel,min_width_ms:minWidthMs,min_interval_ms:minIntervalMs,tolerance,commit})
+      body:JSON.stringify({channel,min_width_ms:minWidthMs,min_interval_ms:minIntervalMs,
+        tolerance,commit,bit_mask:bitMask})
     }),
   triggerEvents: (id: string, condition = '') =>
     call<{events:import('./types').MappedTrigger[];count:number;conditions:string[]}>(
