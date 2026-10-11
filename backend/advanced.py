@@ -266,7 +266,8 @@ def windowed_quality(recording, window_seconds=2.0, channel=None):
         for w in windows:
             # Median-relative thresholds deliberately avoid modality-specific units.
             w["relative_high_amplitude"] = bool(
-                mad > 0 and w["ptp"] > median + 8 * 1.4826 * mad
+                (mad > 0 and w["ptp"] > median + 8 * 1.4826 * mad)
+                or (mad == 0 and median > 0 and w["ptp"] > 3 * median)
             )
             w["relative_flat"] = bool(
                 median > 0 and w["ptp"] < median * .001
