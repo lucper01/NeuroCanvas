@@ -67,3 +67,28 @@ def test_error_guards_and_events():
     assert added.status_code == 200
     assert added.json()["events"] == sorted(added.json()["events"], key=lambda x: x["time"])
     assert client.delete(path).status_code == 200
+
+
+def test_trusted_pwa_preflight_and_blocked_origin():
+    client = TestClient(app)
+    allowed = client.options(
+        "/api/import",
+        headers={
+            "Origin": "https://lucper01.github.io",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Private-Network": "true",
+        },
+    )
+    assert allowed.status_code == 200
+    assert allowed.headers.get("access-control-allow-origin") == "https://lucper01.github.io"
+    assert allowed.headers.get("access-control-allow-private-network") == "true"
+    blocked = client.options(
+        "/api/import",
+        headers={
+            "Origin": "https://untrusted.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Private-Network": "true",
+        },
+    )
+    assert blocked.status_code == 400
+    assert blocked.headers.get("access-control-allow-private-network") != "true"
