@@ -246,7 +246,7 @@ export default function App() {
 
   const loadERP = async () => {
     try {
-      const result = remote ? await api.erp(remote, channel, eventLabel, -.2, .8) : erp(record, channel, eventLabel, -.2, .8)
+      const result = remote ? await api.erp(remote, channel, eventLabel, -.2, .8, excludeMarked) : erp(record, channel, eventLabel, -.2, .8, excludeMarked)
       setEvoked(result); success('Moyenne événementielle calculée.')
     } catch (e) { error(e); setEvoked(null) }
   }
@@ -278,7 +278,7 @@ export default function App() {
       } else if (!remote) throw Error('Cette analyse avancée nécessite le moteur Python local.')
       else if (advancedMode === 'coherence') setAdvancedOutput(await api.coherence(remote, channel, altChannel, start, win))
       else if (advancedMode === 'mne-psd') setAdvancedOutput(await api.mnePSD(remote, start, win))
-      else if (advancedMode === 'mne-epochs') setAdvancedOutput(await api.mneEpochs(remote, eventLabel))
+      else if (advancedMode === 'mne-epochs') setAdvancedOutput(await api.mneEpochs(remote, eventLabel, excludeMarked))
       else if (advancedMode === 'montage') setAdvancedOutput(await api.montage(remote))
       else if (advancedMode === 'ica') setAdvancedOutput(await api.ica(remote, 10))
       else if (advancedMode === 'hrv') setAdvancedOutput(await api.hrv(remote, channel))
@@ -297,6 +297,51 @@ export default function App() {
     } catch (e) { error(e) }
   }
 
+  const scanQC = async () => {
+    setBusy(true)
+    try {
+      const report = remote ? await api.qcWindows(remote, channel, qcWindowSeconds) :
+        qualityWindows(record, qcWindowSeconds, channel)
+      setQcReport(report)
+      success('Contrôle descriptif calculé. Aucun échantillon n’a été supprimé.')
+    } catch (e) { error(e) } finally { setBusy(false) }
+  }
+  const saveBadSegment = async () => {
+    try {
+      const mark = validateMarkedSegment(qcStart, qcEnd, info?.duration || 0, qcReason)
+      if (badSegments.length >= 500) throw Error('Limite de 500 segments marqués atteinte.')
+      if (remote) setRemoteInfo(await api.qcMarkSegment(remote, mark.start, mark.end, mark.reason))
+      else setRecord(old => ({ ...old, info: { ...old.info, bad_segments:
+        [...(old.info.bad_segments || []), mark].sort((a,b) => a.start-b.start) } }))
+      setQcReport(null)
+      success('Segment marqué. Les signaux d’origine ne sont pas modifiés.')
+    } catch (e) { error(e) }
+  }
+  const removeBadSegment = async (index: number) => {
+    try {
+      if (remote) setRemoteInfo(await api.qcRemoveSegment(remote, index))
+      else setRecord(old => ({ ...old, info: { ...old.info, bad_segments:
+        (old.info.bad_segments || []).filter((_,i) => i !== index) } }))
+      setQcReport(null)
+      success('Marquage supprimé.')
+    } catch (e) { error(e) }
+  }
+  const toggleBadChannel = async (name: string) => {
+    try {
+      const marked = !badChannels.includes(name)
+      if (remote) setRemoteInfo(await api.qcMarkChannel(remote, name, marked))
+      else setRecord(old => ({ ...old, info: { ...old.info, bad_channels:
+        marked ? [...(old.info.bad_channels || []), name] :
+          (old.info.bad_channels || []).filter(x => x !== name) } }))
+      setQcReport(null)
+      success(marked ? 'Canal signalé pour exclusion manuelle.' : 'Canal réhabilité.')
+    } catch (e) { error(e) }
+  }
+  const exportQC = () => saveBlob(JSON.stringify({
+    application:'NeuroCanvas', version:'0.2.0', recording: selectedLabel, sfreq,
+    exported_at:new Date().toISOString(), bad_channels:badChannels, bad_segments:badSegments,
+    screening:qcReport, warning:'Marquages manuels, sans suppression des données brutes.'
+  },null,2),'application/json','neurocanvas_artifact_review.json')
   const addStep = async () => {
     if (!selection.length) { error('Sélectionner au moins un canal avant d’appliquer un traitement.'); return }
     const newStep: Step = { method: stepType, channels: [...selection] }
@@ -353,8 +398,14 @@ export default function App() {
     if (remote) { error('Les sessions Python en mémoire ne sont pas sérialisées. Exporter les données CSV et la provenance JSON.'); return }
     saveBlob(JSON.stringify(record), 'application/json', 'neurocanvas_session.json')
   }
-  const graphShapes = useMemo(() => events.filter(ev => ev.time >= start && ev.time <= start + duration).slice(0, 120)
-    .map(ev => ({ type: 'line', x0: ev.time, x1: ev.time, y0: 0, y1: 1, yref: 'paper', line: { color: '#d4a46b', width: 1, dash: 'dot' } })), [events, start, duration])
+  const graphShapes = useMemo(() => [
+    ...badSegments.filter(seg => seg.start < start + duration && seg.end > start).slice(0,100)
+      .map(seg => ({ type:'rect', x0:seg.start, x1:seg.end, y0:0, y1:1, yref:'paper',
+        line: {width:0}, fillcolor:'rgba(199,71,72,.10)', layer:'below' })),
+    ...events.filter(ev => ev.time >= start && ev.time <= start + duration).slice(0, 120)
+      .map(ev => ({ type:'line', x0:ev.time, x1:ev.time, y0:0, y1:1, yref:'paper',
+        line: { color:'#d4a46b', width:1, dash:'dot' } }))
+  ], [events, badSegments, start, duration])
   const signalTraces = useMemo(() => {
     const result: unknown[] = []
     const total = Math.max(1, traces.length)
@@ -502,7 +553,7 @@ export default function App() {
               </div></Panel></div>
         </>}
 
-        {['explorer', 'processing', 'frequency', 'physiology', 'advanced'].includes(tab) && <div className="data-bar">
+        {['explorer', 'processing', 'frequency', 'physiology', 'advanced', 'artifact'].includes(tab) && <div className="data-bar">
           <div><span className="tiny-label">ENREGISTREMENT ACTIF</span><strong>{selectedLabel}</strong>
             <small>{format(info?.duration || 0, 2)} s · {channels.length} canaux · {format(sfreq, 2)} Hz</small></div>
           <button className="outline small" onClick={() => fileInput.current?.click()}><FileUp size={15}/> Changer de fichier</button>
@@ -619,7 +670,9 @@ export default function App() {
               {channels.map(ch => <option key={ch.name}>{ch.name}</option>)}</select></label>
               <label>Événement<select value={eventLabel} onChange={e=>setEventLabel(e.target.value)}>
                 {[...new Set(events.map(x=>x.label))].map(x=><option key={x}>{x}</option>)}
-              </select></label><button className="primary" onClick={() => void loadERP()}><Activity size={16}/> Calculer ERP</button></div>
+              </select></label><label className="toggle"><input type="checkbox" checked={excludeMarked}
+                onChange={e => setExcludeMarked(e.target.checked)}/> Exclure les artéfacts marqués</label>
+              <button className="primary" onClick={() => void loadERP()}><Activity size={16}/> Calculer ERP</button></div>
             {evoked ? <><div className="result-info">{evoked.n} époques incluses · {evoked.excluded} exclues (bornes)</div>
               <Plot title="Event-locked average" xTitle="Temps relatif (s)" yTitle={'Amplitude (' + evoked.unit + ')'} traces={[
                 { type:'scatter', mode:'lines', name:'Moyenne', x:evoked.time, y:evoked.mean, line:{ color:COLORS[0], width:2 }},
@@ -628,7 +681,7 @@ export default function App() {
                     fillcolor:'rgba(24,125,104,.14)', line:{ width:0 }}] : [])
               ]} /></> : <div className="empty-state"><Activity size={28}/><h3>Calculer une réponse moyenne</h3>
                 <p>Les événements doivent être disponibles. Fenêtre fixe : −200 à +800 ms, avec correction de baseline pré-stimulus.</p></div>}
-            <p className="note">La moyenne ne comporte pas encore de rejet automatique des artéfacts. Elle ne remplace pas une chaîne EEG validée.</p>
+            <p className="note">Le rejet manuel n’est appliqué que lorsque l’option est cochée. Aucune détection automatique ne supprime les essais. Ce calcul reste exploratoire.</p>
           </Panel><Panel title="NeuroKit2 processor" description="Traitements physiologiques spécialisés" className="right-panel">
             <div className="form-stack"><label>Modalité<select value={physiologyType} onChange={e=>setPhysiologyType(e.target.value)}>
               <option value="ecg">ECG · Détection QRS / HR</option><option value="eda">EDA · Tonic / Phasic</option>
@@ -665,6 +718,9 @@ export default function App() {
               {channels.map(c=><option key={c.name}>{c.name}</option>)}</select></label>}
             {advancedMode === 'mne-epochs' && <label>Événement<select value={eventLabel} onChange={e=>setEventLabel(e.target.value)}>
               {[...new Set(events.map(e=>e.label))].map(x=><option key={x}>{x}</option>)}</select></label>}
+            {advancedMode === 'mne-epochs' && <label className="toggle"><input type="checkbox"
+              checked={excludeMarked} onChange={e=>setExcludeMarked(e.target.checked)}/>
+              Exclure segments et voies marqués</label>}
             <button className="primary" disabled={busy || (!connected && advancedMode !== 'quality')}
               onClick={() => void runAdvanced()}><BrainCircuit size={16}/> Lancer l’analyse</button>
           </div>
@@ -684,6 +740,68 @@ export default function App() {
           </div>
           <p className="note"><strong>Attention :</strong> changer une unité dans ces métadonnées ne multiplie pas les valeurs par un facteur de conversion. Les données CSV doivent déjà être exprimées dans l’unité choisie. Les fonctions MNE acceptent les voies EEG annotées en V, mV ou µV.</p>
         </Panel>
+        </>}
+
+        {tab === 'artifact' && <>
+          <div className="columns-main">
+            <Panel title="Analyse par fenêtre" description="Indicateurs descriptifs, sans rejet automatique">
+              <div className="toolbar"><label>Canal<select value={channel} onChange={e=>{setChannel(e.target.value);setQcReport(null)}}>
+                {channels.map(c=><option key={c.name}>{c.name}</option>)}</select></label>
+                <label>Fenêtre QC (s)<input type="number" min=".2" max="60" step=".5" value={qcWindowSeconds}
+                  onChange={e=>setQcWindowSeconds(Number(e.target.value))}/></label>
+                <button className="primary" disabled={busy} onClick={() => void scanQC()}><Activity size={16}/> Examiner le canal</button>
+              </div>
+              {qcReport?.channel_results[0] ? <>
+                <div className="qc-stats">
+                  <div><strong>{qcReport.channel_results[0].windows.length}</strong><small>Fenêtres analysées</small></div>
+                  <div><strong>{qcReport.channel_results[0].windows.filter(w=>w.relative_high_amplitude || w.relative_flat).length}</strong>
+                    <small>Périodes suspectes</small></div>
+                  <div><strong>{badSegments.length}</strong><small>Segments annotés</small></div>
+                </div>
+                <Plot title="Amplitude crête-à-crête" xTitle="Temps (s)" yTitle={'P–P (' + qcReport.channel_results[0].unit + ')'}
+                  height={295} traces={[{ type:'bar', x:qcReport.channel_results[0].windows.map(w=>(w.start+w.end)/2),
+                    y:qcReport.channel_results[0].windows.map(w=>w.ptp), name:channel,
+                    marker:{color:qcReport.channel_results[0].windows.map(w=>
+                      w.manually_excluded ? '#bc5c5c' :
+                        (w.relative_high_amplitude||w.relative_flat ? '#d5a05c' : '#39876e'))} }]}/>
+                <div className="qc-table"><table><thead><tr><th>Début</th><th>Fin</th><th>Amplitude P–P</th><th>Statut</th></tr></thead>
+                  <tbody>{qcReport.channel_results[0].windows.map((w,i)=><tr key={i}
+                    className={w.relative_high_amplitude || w.relative_flat ? 'qc-flagged' : ''}
+                    onClick={()=>{setQcStart(w.start);setQcEnd(Math.min(w.end,info?.duration||w.end));setStart(w.start);setDuration(Math.max(.1,w.end-w.start))}}>
+                    <td>{format(w.start,3)} s</td><td>{format(w.end,3)} s</td>
+                    <td>{format(w.ptp,5)}</td><td>{w.manually_excluded ? 'Marqué manuellement' :
+                      (w.relative_high_amplitude || w.relative_flat ? 'Suspect' : 'Normal')}</td>
+                  </tr>)}</tbody></table></div>
+                <p className="note">Indicateurs exploratoires uniquement : aucune exclusion automatique.</p>
+              </> : <div className="empty-state"><ShieldCheck size={30}/><h3>Qualité des signaux</h3>
+                <p>Choisir un canal et analyser les fluctuations pour guider l’inspection humaine.</p></div>}
+            </Panel>
+            <Panel title="Contrôle des artéfacts" description="Marquages manuels réversibles" className="right-panel">
+              <div className="form-stack">
+                <label>Canal à exclure<select value={channel} onChange={e=>setChannel(e.target.value)}>
+                  {channels.map(c=><option key={c.name}>{c.name}</option>)}</select></label>
+                <button className="outline" onClick={() => void toggleBadChannel(channel)}>
+                  <ShieldCheck size={15}/>{badChannels.includes(channel) ? 'Réhabiliter ce canal' : 'Marquer ce canal'}</button>
+                <label>Début du segment (s)<input type="number" min="0" step=".01" value={qcStart}
+                  onChange={e=>setQcStart(Number(e.target.value))}/></label>
+                <label>Fin du segment (s)<input type="number" min="0" step=".01" value={qcEnd}
+                  onChange={e=>setQcEnd(Number(e.target.value))}/></label>
+                <label>Justification<input value={qcReason} maxLength={180} onChange={e=>setQcReason(e.target.value)}/></label>
+                <button className="primary" onClick={() => void saveBadSegment()}><Plus size={16}/> Marquer le segment</button>
+                <button className="outline" onClick={exportQC}><Download size={15}/> Exporter contrôle qualité</button>
+              </div>
+              <p className="note">Aucun signal brut n'est écrasé. Les exclusions ne sont utilisées dans les ERP que sur demande.</p>
+            </Panel>
+          </div>
+          <Panel title="Segments annotés" description="Historique manuel et réversible">
+            {badSegments.length ? badSegments.map((seg,i)=><div className="step" key={i}>
+              <span className="step-index">{i+1}</span><div><strong>{format(seg.start,3)} – {format(seg.end,3)} s</strong>
+                <small>{seg.reason}</small></div><button className="icon-button" onClick={() => void removeBadSegment(i)}
+                  aria-label={'Supprimer segment ' + (i+1)}><Trash2 size={16}/></button>
+            </div>) : <p className="note">Aucun segment marqué.</p>}
+            <div className="event-chips">{badChannels.map(name=><span key={name}>{name} · Canal à exclure</span>)}
+              {!badChannels.length && <span>Aucun canal marqué.</span>}</div>
+          </Panel>
         </>}
 
         {tab === 'learning' && <>
@@ -727,6 +845,13 @@ export default function App() {
             <Panel title="Portable session" description="Session autonome du navigateur">
               <div className="export-icon"><Save size={28}/></div><p>Sauvegarder tous les signaux bruts, événements et traitements dans un JSON réimportable.</p>
               <button className="outline" disabled={!!remote} onClick={exportSession}><Save size={16}/> Sauvegarder session</button></Panel></div>
+          <Panel title="Contrôle des artéfacts" description="Décisions de revue manuelle">
+            <div className="summary-list">
+              <div><span>Canaux à exclure</span><strong>{badChannels.length}</strong></div>
+              <div><span>Segments annotés</span><strong>{badSegments.length}</strong></div>
+            </div>
+            <button className="outline" onClick={exportQC}><Download size={15}/> Exporter contrôle qualité</button>
+          </Panel>
           <Panel title="Recording audit trail" description="Opérations appliquées à la session">
             <div className="summary-list"><div><span>Origine</span><strong>{info?.source}</strong></div>
               <div><span>Nom</span><strong>{selectedLabel}</strong></div>
