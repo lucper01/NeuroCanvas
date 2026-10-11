@@ -141,3 +141,46 @@ def test_bitmask_decodes_embedded_status_bits():
     assert plain["counts"].get("65547")==1
     assert masked["counts"].get("11")==2
     assert masked["events"][0]["time"]==1.0
+
+
+
+def test_multichannel_npz_contains_all_signals_codebook_and_trial_labels():
+    import io
+    import json
+    from triggers import multichannel_epochs_npz
+
+    rec = build()
+    rec.trigger_definitions = validate_definitions([
+        {"code":11, "meaning":"Visual standard", "conditions":["Visual"]},
+        {"code":12, "meaning":"Visual deviant", "conditions":["Visual"]},
+        {"code":21, "meaning":"Auditory standard", "conditions":["Auditory"]},
+    ])
+    commit_detected(rec, detect_triggers(rec, "Status"))
+    original = rec.original.copy()
+    npz = multichannel_epochs_npz(rec, "Visual", -.1, .3)
+    with np.load(npz, allow_pickle=False) as archive:
+        signal = archive["epochs"]
+        meta = json.loads(archive["metadata_json"].item())
+        assert signal.shape == (3, 1, 101)
+        assert meta["channels"] == ["Cz"]
+        assert meta["units"] == ["V"]
+        assert meta["epochs"][0]["code"] == 11
+        assert meta["epochs"][1]["code"] == 12
+        assert meta["trigger_definitions"][0]["meaning"] == "Visual standard"
+    assert np.array_equal(rec.original, original)
+
+
+def test_multichannel_npz_export_route():
+    import io
+    client=TestClient(app)
+    key=client.post("/api/demo").json()["session_id"]
+    root=f"/api/sessions/{key}"
+    assert client.post(root+"/triggers/detect",json={
+        "channel":"TRIGGER TTL","commit":True}).status_code==200
+    resp=client.get(root+"/triggers/export/multichannel",params={
+        "condition":"Visual","tmin":-.2,"tmax":.8})
+    assert resp.status_code==200,resp.text[:400] if resp.status_code != 200 else ""
+    with np.load(io.BytesIO(resp.content),allow_pickle=False) as npz:
+        assert npz["epochs"].shape[0]==4
+        assert npz["epochs"].shape[1]==5
+    client.delete(root)
