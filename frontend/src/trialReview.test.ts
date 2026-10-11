@@ -65,3 +65,18 @@ describe('NeuroCanvas per-trial review', () => {
     expect(() => summarizeConditions(recorded(),'EEG Fz',-.2,.8,.5,1,0,false,false)).toThrow()
   })
 })
+
+
+describe('Paginated epoch review',()=>{
+  it('keeps condition grand averages invariant across trial pages',()=>{
+    const rec=recorded()
+    const p1=conditionEpochs(rec,'EEG Fz','Visual',-.2,.8,0,false,false,0,2)
+    const p2=conditionEpochs(rec,'EEG Fz','Visual',-.2,.8,0,false,false,2,2)
+    expect(p1.trials).toHaveLength(2)
+    expect(p2.trials).toHaveLength(2)
+    expect(p1.next_offset).toBe(2)
+    expect(p2.next_offset).toBeNull()
+    expect(p2.trials[0].event_index).toBe(2)
+    expect(p1.mean).toEqual(p2.mean)
+  })
+})
