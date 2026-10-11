@@ -369,6 +369,7 @@ class TriggerCodebook(BaseModel):
 
 class TriggerDetection(BaseModel):
     channel: str = Field(min_length=1)
+    bit_mask: int | None = Field(default=None, ge=1, le=16777215)
     min_width_ms: float = Field(default=0, ge=0, le=1000)
     min_interval_ms: float = Field(default=0, ge=0, le=5000)
     tolerance: float = Field(default=.25, ge=0, le=.49)
@@ -388,7 +389,7 @@ def update_trigger_codebook(key: str, body: TriggerCodebook):
 def trigger_detector(key: str, body: TriggerDetection):
     rec = session_or_404(key)
     detection = guard(lambda: detect_triggers(
-        rec, body.channel, body.min_width_ms, body.min_interval_ms, body.tolerance,
+        rec, body.channel, body.min_width_ms, body.min_interval_ms, body.tolerance, body.bit_mask,
     ))
     if body.commit:
         detection["commit"] = commit_detected(rec, detection)
