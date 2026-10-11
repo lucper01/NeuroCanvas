@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import Plotly from 'plotly.js-dist-min'
 import {
-  Activity, BrainCircuit, ChartNoAxesCombined, ChevronDown, CircleHelp, ClipboardList,
+  Activity, BrainCircuit, ChartNoAxesCombined, CircleHelp, ClipboardList,
   Database, Download, FileDown, FileUp, Filter, FlaskConical, HeartPulse, Info,
-  Layers3, Menu, Monitor, Plus, RefreshCw, RotateCcw, Save, Settings2,
+  Layers3, Menu, Monitor, Plus, RefreshCw, RotateCcw, Save,
   ShieldCheck, SlidersHorizontal, Sparkles, Trash2, Wifi, WifiOff, X
 } from 'lucide-react'
 import type { Evoked, LocalRecording, RecordingInfo, Spectrum, Step, TimeFrequency, Trace } from './types'
