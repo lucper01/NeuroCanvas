@@ -9,6 +9,29 @@ export function eventCode(event: EventMark): number | null {
   return Number.isSafeInteger(code) ? code : null
 }
 
+/** Stable local event identity; never based on editable condition descriptions. */
+export function localEventUID(rec: LocalRecording, event: EventMark): string {
+  const id = event.uid
+  if (typeof id === 'string' && id.length) return id
+  return [
+    Math.round(event.time * rec.info.sfreq),
+    eventCode(event) ?? 'none',
+    event.source ?? 'manual',
+    event.label
+  ].join(':')
+}
+
+export function setLocalTrialDecision(rec: LocalRecording, eventUID: string,
+                                      rejected: boolean, reason: string): LocalRecording {
+  const keys = new Set(rec.info.events.map(event => localEventUID(rec, event)))
+  if (!keys.has(eventUID)) throw Error('Identifiant d’essai inconnu. Recalculer les époques.')
+  if (rejected && (reason.trim().length < 2 || reason.length > 180))
+    throw Error('Indiquer une justification de 2 à 180 caractères.')
+  const decisions = (rec.info.trial_decisions || []).filter(item => item.event_uid !== eventUID)
+  if (rejected) decisions.push({event_uid:eventUID,rejected:true,reason:reason.trim()})
+  return {...rec,info:{...rec.info,trial_decisions:decisions}}
+}
+
 export function mapTrigger(event: EventMark, definitions: TriggerDefinition[]): MappedTrigger {
   const code = eventCode(event)
   const definition = definitions.find(x => x.code === code)
@@ -85,8 +108,11 @@ export function commitTriggers(rec: LocalRecording, preview: TriggerPreview): Lo
 
 export function conditionEpochs(rec: LocalRecording, channel: string, condition: string,
                                 tmin = -.2,tmax = .8, baselineEnd = 0,
-                                excludeMarked = false): ConditionEpochs {
+                                excludeMarked = false, excludeRejected = false, trialOffset = 0,
+                                trialLimit = 100): ConditionEpochs {
   const index=rec.info.channels.findIndex(c=>c.name===channel)
+  if(!Number.isInteger(trialOffset)||trialOffset<0||!Number.isInteger(trialLimit)||
+      trialLimit<0||trialLimit>200) throw Error('Pagination des essais invalide.')
   if(index < 0) throw Error('Canal introuvable.')
   if(!Number.isFinite(tmin)||!Number.isFinite(tmax)||tmin>=tmax||
      baselineEnd<tmin||baselineEnd>tmax) throw Error('Fenêtre d’époquage invalide.')
@@ -96,8 +122,9 @@ export function conditionEpochs(rec: LocalRecording, channel: string, condition:
   if(excludeMarked&&(rec.info.bad_channels||[]).includes(channel)) throw Error('Canal marqué pour exclusion.')
   const times=Array.from({length:n},(_,i)=>(a+i)/fs)
   const base=times.map((x,i)=>x>=tmin && x<=baselineEnd ? i:-1).filter(x=>x>=0)
-  const accepted:{event:MappedTrigger; row:number[]}[]=[]
-  let excludedBounds=0,excludedManual=0
+  const accepted:{event:MappedTrigger; row:number[]; eventUID:string;
+    review:{rejected:boolean;reason:string}|undefined}[]=[]
+  let excludedBounds=0,excludedManual=0,excludedRejected=0
   const def=rec.info.trigger_definitions||[]
   for(const original of rec.info.events){
     const event=mapTrigger(original,def)
@@ -106,29 +133,39 @@ export function conditionEpochs(rec: LocalRecording, channel: string, condition:
     if(lo<0||hi>rec.info.samples){excludedBounds++;continue}
     if(excludeMarked&&(rec.info.bad_segments||[]).some(segment=>
         segment.start<hi/fs && segment.end>lo/fs)){excludedManual++;continue}
+    const uid=localEventUID(rec,original)
+    const review=(rec.info.trial_decisions||[]).find(x=>x.event_uid===uid)
+    if(excludeRejected&&review?.rejected){excludedRejected++;continue}
     const row=rec.processed[index].slice(lo,hi)
     if(base.length && baselineEnd>tmin){
       const baseline=base.reduce((sum,i)=>sum+row[i],0)/base.length
       for(let i=0;i<row.length;i++)row[i]-=baseline
     }
-    accepted.push({event,row})
+    accepted.push({event,row,eventUID:uid,review})
     if(accepted.length*n>2000000)throw Error('Époques trop volumineuses : réduire la fenêtre.')
   }
   if(!accepted.length)throw Error('Aucune époque valide pour cette condition.')
   const average=Array.from({length:n},(_,i)=>accepted.reduce((sum,x)=>sum+x.row[i],0)/accepted.length)
   const sem=accepted.length>1?average.map((mean,i)=>Math.sqrt(
     accepted.reduce((total,x)=>total+(x.row[i]-mean)**2,0)/(accepted.length-1))/Math.sqrt(accepted.length)):null
-  const stride=Math.max(1,Math.ceil(n*Math.min(accepted.length,200)/100000))
+  const stride=Math.max(1,Math.ceil(n*Math.min(accepted.length,trialLimit)/100000))
   const counts:Record<string,number>={}
   accepted.forEach(({event})=>{const code=String(event.code);counts[code]=(counts[code]||0)+1})
   return {condition,channel,n:accepted.length,excluded_bounds:excludedBounds,
-    excluded_manual:excludedManual,codes:counts,time:times,mean:average,sem,
-    trial_time:times.filter((_,i)=>i%stride===0),trials:accepted.slice(0,200)
-      .map(({event,row},i)=>({event_index:i,time:event.time,code:event.code,
-        meaning:event.meaning,conditions:event.conditions,
+    excluded_manual:excludedManual,excluded_rejected:excludedRejected,
+    codes:counts,time:times,mean:average,sem,
+    trial_offset:trialOffset,trial_limit:trialLimit,
+    next_offset: trialLimit>0 && trialOffset+trialLimit<accepted.length ? trialOffset+trialLimit : null,
+    trial_time:times.filter((_,i)=>i%stride===0),trials:accepted.slice(trialOffset,trialOffset+trialLimit)
+      .map(({event,row,eventUID,review},i)=>({event_index:trialOffset+i,event_uid:eventUID,
+        time:event.time,code:event.code,meaning:event.meaning,conditions:event.conditions,
+        review_rejected:!!review?.rejected,review_reason:review?.reason||'',
+        rms:Math.sqrt(row.reduce((sum,v)=>sum+v*v,0)/row.length),
+        ptp:row.reduce((hi,v)=>Math.max(hi,v),-Infinity)-row.reduce((lo,v)=>Math.min(lo,v),Infinity),
+        mean_amplitude:row.reduce((sum,v)=>sum+v,0)/row.length,
         signal:row.filter((_,j)=>j%stride===0)})),
     unit:rec.info.channels[index].unit,baseline:baselineEnd>tmin?[tmin,baselineEnd]:null,
-    exclude_marked:excludeMarked}
+    exclude_marked:excludeMarked,exclude_rejected:excludeRejected}
 }
 
 export function eventCSV(rec: LocalRecording): string {
@@ -145,11 +182,12 @@ export function epochCSV(result: ConditionEpochs): string {
   if(result.trials.length<result.n || result.trial_time.length!==result.time.length)
     throw Error('Export complet indisponible depuis cet aperçu. Utiliser le moteur Python.')
   if(result.n*result.time.length>1000000)throw Error('Exporter les époques avec le moteur Python.')
-  const rows=['trial_index,condition,code,meaning,onset_s,relative_time_s,amplitude,unit']
-  const quote=(v:string|number)=>'"'+String(v).replace(/"/g,'""')+'"'
+  const rows=['trial_index,condition,code,meaning,onset_s,relative_time_s,amplitude,unit,event_uid,review_rejected,review_reason']
+  const quote=(v:string|number|boolean)=>'"'+String(v).replace(/"/g,'""')+'"'
   result.trials.forEach((trial,i)=>trial.signal.forEach((amplitude,j)=>{
     rows.push([i+1,trial.conditions.join('|'),trial.code||'',trial.meaning,trial.time,
-      result.trial_time[j],amplitude,result.unit].map(quote).join(','))
+      result.trial_time[j],amplitude,result.unit,trial.event_uid||'',!!trial.review_rejected,
+      trial.review_reason||''].map(quote).join(','))
   }))
   return rows.join('\n')
 }

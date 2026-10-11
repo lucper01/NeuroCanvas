@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import Plotly from 'plotly.js-dist-min'
 import { Activity, Check, Download, FileUp, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import type { ConditionEpochs, LocalRecording, RecordingInfo,
+import type { ConditionEpochs, ConditionMetrics, LocalRecording, RecordingInfo,
   TriggerDefinition, TriggerPreview } from './types'
 import type { Language } from './localization'
 import { api } from './api'
 import { commitTriggers, conditionEpochs, detectTriggers, epochCSV, eventCode,
-  eventCSV, mapTrigger, validateDefinitions } from './triggers'
+  eventCSV, mapTrigger, validateDefinitions, setLocalTrialDecision } from './triggers'
+import { summarizeConditions, metricsCSV } from './conditionMetrics'
+import { createAnalysisProtocol, parseAnalysisProtocol } from './analysisProtocol'
 
 type Props = {
   info: RecordingInfo
@@ -22,6 +24,15 @@ type Props = {
 
 const EN: Record<string,string> = {
   'Canal de triggers':'Trigger channel',
+  'Protocole d’analyse':'Analysis protocol',
+  'Nom du protocole':'Protocol name',
+  'Exporter le protocole':'Export protocol',
+  'Importer un protocole':'Import protocol',
+  'Protocole importé : confirmer le dictionnaire pour appliquer les correspondances.':
+    'Protocol loaded: save the codebook to apply trigger mappings.',
+  'Protocole exporté':'Protocol exported',
+  'Les protocoles enregistrent les réglages et la signification des triggers, jamais les signaux ou les données personnelles.':
+    'Protocols preserve analysis settings and trigger meanings, never samples or personal data.',
   'Masque de bits':'Bit mask',
   'Aucun masque':'No mask',
   'Détection depuis le signal brut':'Detection from raw samples',
@@ -62,8 +73,43 @@ const EN: Record<string,string> = {
   'Calculer les époques':'Compute epochs',
   'Comparer toutes les conditions':'Compare all conditions',
   'Essais retenus':'Included trials',
+  'Essais rejetés':'Rejected trials',
   'Essais exclus':'Excluded trials',
+  'Revue des essais':'Trial review',
+  'Rejet manuel':'Manual rejection',
+  'Rejeter cet essai':'Reject this trial',
+  'Réhabiliter cet essai':'Restore this trial',
+  'Motif du rejet':'Rejection reason',
+  'Essai conservé':'Trial included',
+  'Essai rejeté':'Trial rejected',
+  'Recalculer pour appliquer les modifications.':'Recompute to apply the review changes.',
+  'Exclure les essais rejetés':'Exclude manually rejected trials',
+  'Aucun essai rejeté':'No trials rejected',
+  'Mesures par condition':'Condition measurements',
+  'Début mesure (s)':'Measurement start (s)',
+  'Fin mesure (s)':'Measurement end (s)',
+  'Calculer les mesures':'Compute measurements',
+  'Exporter mesures CSV':'Export measurements CSV',
+  'Amplitude moyenne':'Mean amplitude',
+  'Pic':'Peak',
+  'Latence du pic':'Peak latency',
+  'Aire signée':'Signed area',
+  'Mesures descriptives seulement, sans test statistique.':'Descriptive metrics only, no inferential statistics.',
+  'Export des décisions':'Export review decisions',
+  'Essais à examiner':'Trials to review',
+  'Amplitude crête-à-crête':'Peak-to-peak amplitude',
+  'Code trigger':'Trigger code',
+  'État':'Status',
+  'Veuillez recalculer les époques après une décision.':'Please recompute epochs after a review decision.',
+  'Choisir une condition et calculer ses époques pour annoter chaque essai.':
+    'Select a condition and compute epochs to review individual trials.',
+  'Aucun essai disponible dans la période sélectionnée.':'No trials available in the selected time range.',
+  'Carte thermique des essais':'Trial heatmap',
   'Essai individuel':'Single trial',
+  'Essais précédents':'Previous trials',
+  'Essais suivants':'Next trials',
+  'Essais affichés':'Displayed trials',
+  'Paramètres du calcul':'Analysis parameters',
   'Moyenne par condition':'Condition average',
   'Époque individuelle':'Single epoch',
   'Exporter les événements CSV':'Export event CSV',
@@ -139,6 +185,33 @@ function ScientificPlot({ x, series, title, yTitle }: {
   },[x,series,title,yTitle])
   return <div className="trigger-plot" ref={el}/>
 }
+function EpochHeatmap({ epochs, title }: { epochs: ConditionEpochs; title: string }) {
+  const target=useRef<HTMLDivElement>(null)
+  useEffect(()=>{
+    const node=target.current
+    if(!node || !epochs.trials.length)return
+    void Plotly.react(node,[{
+      type:'heatmap',
+      x:epochs.trial_time,
+      y:epochs.trials.map(trial=>trial.event_index+1),
+      z:epochs.trials.map(trial=>trial.signal),
+      colorscale:'RdBu',reversescale:true,
+      colorbar:{title:{text:epochs.unit}},
+      hovertemplate:'t=%{x:.3f} s<br>trial=%{y}<br>amplitude=%{z:.5g}<extra></extra>'
+    }],{
+      autosize:true,height:Math.min(560,Math.max(310,epochs.trials.length*4+140)),
+      paper_bgcolor:'#fff',plot_bgcolor:'#fff',
+      title:{text:title,font:{size:13}},
+      margin:{l:70,r:24,t:48,b:52},
+      xaxis:{title:{text:'Time (s)'}},
+      yaxis:{title:{text:'Trial index'},autorange:'reversed'},
+      font:{size:11,color:'#60736a'}
+    },{responsive:true,displaylogo:false})
+    return ()=>{Plotly.purge(node)}
+  },[epochs,title])
+  return <div className="trigger-heatmap" ref={target}/>
+}
+
 export default function TriggerStudio({
   info,record,remote,locale,setRecord,setRemoteInfo,success,error
 }:Props){
@@ -162,10 +235,21 @@ export default function TriggerStudio({
   const [tmax,setTmax]=useState(.8)
   const [baselineEnd,setBaselineEnd]=useState(0)
   const [excludeMarked,setExcludeMarked]=useState(false)
+  const [excludeRejected,setExcludeRejected]=useState(false)
+  const [reviewReason,setReviewReason]=useState('Artéfact identifié visuellement')
+  const [measurementStart,setMeasurementStart]=useState(0)
+  const [measurementEnd,setMeasurementEnd]=useState(.3)
+  const [metrics,setMetrics]=useState<ConditionMetrics|null>(null)
   const [averaged,setAveraged]=useState<ConditionEpochs|null>(null)
+  const [epochSnapshot,setEpochSnapshot]=useState<{
+    channel:string;condition:string;tmin:number;tmax:number;baselineEnd:number;
+    excludeMarked:boolean;excludeRejected:boolean
+  }|null>(null)
   const [comparisons,setComparisons]=useState<ConditionEpochs[]>([])
   const [trialIndex,setTrialIndex]=useState(0)
   const importRef=useRef<HTMLInputElement>(null)
+  const protocolRef=useRef<HTMLInputElement>(null)
+  const [protocolName,setProtocolName]=useState('Generic event analysis')
 
   const codes = useMemo(()=>[...new Set([
     ...info.events.map(e=>eventCode(e)).filter((n):n is number=>n!==null),
@@ -223,19 +307,31 @@ export default function TriggerStudio({
     setGroupName('')
     success(t('Enregistrer les changements avant l’analyse.'))
   }
-  const compute=async(compareAll=false)=>{
+  const compute=async(compareAll=false, pageOffset=0)=>{
     setBusy(true)
     try{
+      const options=pageOffset>0 && epochSnapshot ? epochSnapshot : {
+        channel:analysisChannel,condition:viewCondition,tmin,tmax,baselineEnd,
+        excludeMarked,excludeRejected
+      }
       if(compareAll){
         if(!availableConditions.length)throw Error(t('Aucun dictionnaire de codes.'))
-        const output=await Promise.all(availableConditions.slice(0,12).map(condition=>remote?
-          api.triggerEpochs(remote,analysisChannel,condition,tmin,tmax,baselineEnd,excludeMarked):
-          Promise.resolve(conditionEpochs(record,analysisChannel,condition,tmin,tmax,baselineEnd,excludeMarked))))
-        setComparisons(output);setAveraged(null)
+        const batch=await Promise.allSettled(availableConditions.slice(0,12).map(condition=>remote?
+          api.triggerEpochs(remote,options.channel,condition,options.tmin,options.tmax,
+            options.baselineEnd,options.excludeMarked,options.excludeRejected,0,1):
+          Promise.resolve(conditionEpochs(record,options.channel,condition,
+            options.tmin,options.tmax,options.baselineEnd,options.excludeMarked,options.excludeRejected,0,1))))
+        const output=batch.filter((result):result is PromiseFulfilledResult<ConditionEpochs>=>
+          result.status==='fulfilled').map(result=>result.value)
+        if(!output.length)throw Error(t('Aucune époque valide pour cette condition.'))
+        setComparisons(output);setAveraged(null);setEpochSnapshot(null)
       }else{
-        const result=remote?await api.triggerEpochs(remote,analysisChannel,viewCondition,tmin,tmax,baselineEnd,excludeMarked):
-          conditionEpochs(record,analysisChannel,viewCondition,tmin,tmax,baselineEnd,excludeMarked)
-        setAveraged(result);setComparisons([]);setTrialIndex(0)
+        const result=remote?await api.triggerEpochs(remote,options.channel,options.condition,
+          options.tmin,options.tmax,options.baselineEnd,options.excludeMarked,
+          options.excludeRejected,pageOffset,100):
+          conditionEpochs(record,options.channel,options.condition,options.tmin,options.tmax,
+            options.baselineEnd,options.excludeMarked,options.excludeRejected,pageOffset,100)
+        setAveraged(result);setComparisons([]);setTrialIndex(0);setEpochSnapshot(options)
       }
       success(t('Époques calculées'))
     }catch(e){error(e)}finally{setBusy(false)}
@@ -252,9 +348,94 @@ export default function TriggerStudio({
   const exportEpochs=()=>{
     if(!averaged){error(t('Aucun essai calculé.'));return}
     try{
-      if(remote)window.open(api.triggerEpochURL(remote,analysisChannel,viewCondition,tmin,tmax,
-        baselineEnd,excludeMarked),'_blank','noopener,noreferrer')
+      const cfg=epochSnapshot
+      if(remote && cfg)window.open(api.triggerEpochURL(remote,cfg.channel,cfg.condition,cfg.tmin,cfg.tmax,
+        cfg.baselineEnd,cfg.excludeMarked,cfg.excludeRejected),'_blank','noopener,noreferrer')
       else csvDownload('neurocanvas_epochs.csv',epochCSV(averaged))
+    }catch(e){error(e)}
+  }
+  const decideTrial=async(rejected:boolean)=>{
+    const trial=averaged?.trials[trialIndex]
+    if(!trial?.event_uid){error(t('Aucun essai calculé.'));return}
+    setBusy(true)
+    try{
+      if(remote){
+        const result=await api.trialReview(remote,trial.event_uid,rejected,reviewReason)
+        setRemoteInfo(result.metadata)
+      }else{
+        setRecord(old=>setLocalTrialDecision(old,trial.event_uid!,rejected,reviewReason))
+      }
+      setAveraged(null);setComparisons([]);setMetrics(null)
+      success(t('Veuillez recalculer les époques après une décision.'))
+    }catch(e){error(e)}finally{setBusy(false)}
+  }
+  const calculateMetrics=async()=>{
+    setBusy(true)
+    try{
+      const result=remote ? await api.conditionMetrics(remote,analysisChannel,tmin,tmax,
+        measurementStart,measurementEnd,baselineEnd,excludeMarked,excludeRejected) :
+        summarizeConditions(record,analysisChannel,tmin,tmax,
+          measurementStart,measurementEnd,baselineEnd,excludeMarked,excludeRejected)
+      setMetrics(result)
+      success(t('Mesures par condition'))
+    }catch(e){error(e)}finally{setBusy(false)}
+  }
+  const exportMetrics=()=>{
+    if(!metrics){error(t('Calculer les mesures'));return}
+    if(remote)window.open(api.conditionMetricsURL(remote,metrics.channel,metrics.tmin,metrics.tmax,
+      metrics.measurement_window[0],metrics.measurement_window[1],metrics.baseline_end,
+      metrics.exclude_marked,metrics.exclude_rejected),'_blank','noopener,noreferrer')
+    else csvDownload('neurocanvas_condition_metrics.csv',metricsCSV(metrics))
+  }
+  const exportReviews=()=>{
+    csvDownload('neurocanvas_trial_review.json',JSON.stringify({
+      application:'NeuroCanvas',version:'0.4.0',
+      recording:info.name,sfreq:info.sfreq,
+      decisions:info.trial_decisions||[],
+      exclude_rejected:excludeRejected,
+      warning:'Manual trial decisions, original samples never modified.'
+    },null,2),'application/json')
+  }
+  const exportProtocol=()=>{
+    try{
+      const p=createAnalysisProtocol({
+        name:protocolName,
+        detection:{
+          channel:sourceChannel,min_width_ms:widthMs,min_interval_ms:intervalMs,
+          tolerance,bit_mask:bitMask==='none'?null:Number(bitMask)
+        },
+        codebook:validateDefinitions(definitions),
+        epoch:{
+          channel:analysisChannel,tmin,tmax,baseline_end:baselineEnd,
+          measurement_start:measurementStart,measurement_end:measurementEnd,
+          exclude_marked:excludeMarked,exclude_rejected:excludeRejected
+        }
+      })
+      csvDownload('neurocanvas_analysis_protocol.json',JSON.stringify(p,null,2),'application/json')
+      success(t('Protocole exporté'))
+    }catch(e){error(e)}
+  }
+  const importProtocol=async(file:File)=>{
+    try{
+      const obj=parseAnalysisProtocol(JSON.parse(await file.text()) as unknown)
+      setProtocolName(obj.name)
+      const detector=obj.detection
+      setSourceChannel(info.channels.some(ch=>ch.name===detector.channel)?
+        detector.channel : (info.channels.find(ch=>ch.type==='stim')?.name || sourceChannel))
+      setWidthMs(detector.min_width_ms);setIntervalMs(detector.min_interval_ms)
+      setTolerance(detector.tolerance);setBitMask(detector.bit_mask===null?
+        'none':String(detector.bit_mask))
+      setDefinitions(obj.codebook)
+      setAnalysisChannel(info.channels.some(ch=>ch.name===obj.epoch.channel)?
+        obj.epoch.channel:(info.channels.find(ch=>ch.type==='eeg')?.name||analysisChannel))
+      setTmin(obj.epoch.tmin);setTmax(obj.epoch.tmax)
+      setBaselineEnd(obj.epoch.baseline_end)
+      setMeasurementStart(obj.epoch.measurement_start)
+      setMeasurementEnd(obj.epoch.measurement_end)
+      setExcludeMarked(obj.epoch.exclude_marked)
+      setExcludeRejected(obj.epoch.exclude_rejected)
+      setAveraged(null);setMetrics(null);setComparisons([]);setPreview(null)
+      success(t('Protocole importé : confirmer le dictionnaire pour appliquer les correspondances.'))
     }catch(e){error(e)}
   }
   const importCodebook=async (file:File)=>{
@@ -271,6 +452,21 @@ export default function TriggerStudio({
     <div className="trigger-intro"><Activity size={23}/><div><strong>Trigger & Epoch Studio</strong>
       <p>{t('Détection et signification des triggers, création de conditions et découpage de signaux')}</p></div>
       <span className="trigger-chip">{remote?'PYTHON':'BROWSER'}</span></div>
+
+    <section className="panel">
+      <div className="panel-heading"><div><h3>00 · {t('Protocole d’analyse')}</h3>
+        <p>{t('Les protocoles enregistrent les réglages et la signification des triggers, jamais les signaux ou les données personnelles.')}</p></div></div>
+      <div className="toolbar">
+        <label>{t('Nom du protocole')}<input type="text" value={protocolName}
+          maxLength={120} onChange={e=>setProtocolName(e.target.value)}/></label>
+        <button className="outline" onClick={exportProtocol}>
+          <Download size={15}/>{t('Exporter le protocole')}</button>
+        <button className="outline" onClick={()=>protocolRef.current?.click()}>
+          <FileUp size={15}/>{t('Importer un protocole')}</button>
+        <input type="file" hidden ref={protocolRef} accept=".json,application/json"
+          onChange={e=>{const file=e.target.files?.[0];if(file)void importProtocol(file);e.target.value=''}}/>
+      </div>
+    </section>
 
     <section className="panel">
       <div className="panel-heading"><div><h3>01 · {t('Détection depuis le signal brut')}</h3>
@@ -370,6 +566,8 @@ export default function TriggerStudio({
         <label>{t('Fin de baseline (s)')}<input type="number" step=".05" value={baselineEnd} onChange={e=>setBaselineEnd(Number(e.target.value))}/></label>
         <label className="toggle"><input type="checkbox" checked={excludeMarked}
           onChange={e=>setExcludeMarked(e.target.checked)}/>{t('Exclure les artéfacts marqués')}</label>
+        <label className="toggle"><input type="checkbox" checked={excludeRejected}
+          onChange={e=>setExcludeRejected(e.target.checked)}/>{t('Exclure les essais rejetés')}</label>
         <button className="primary" disabled={busy} onClick={()=>void compute(false)}>
           <RefreshCw size={15}/>{t('Calculer les époques')}</button>
         <button className="outline" disabled={busy||!availableConditions.length} onClick={()=>void compute(true)}>
@@ -385,16 +583,50 @@ export default function TriggerStudio({
           ...(averaged.sem?[{name:'+SEM',values:averaged.mean.map((y,i)=>y+averaged.sem![i]),dash:'dot'},
             {name:'−SEM',values:averaged.mean.map((y,i)=>y-averaged.sem![i]),dash:'dot'}]:[])
         ]}/>
+        {averaged.trials.length>1&&<EpochHeatmap epochs={averaged}
+          title={t('Carte thermique des essais')}/>}
         {averaged.trials.length>0&&<><div className="toolbar"><label>{t('Essai individuel')}
           <select value={trialIndex} onChange={e=>setTrialIndex(Number(e.target.value))}>
             {averaged.trials.map((trial,i)=><option value={i} key={i}>
               {i+1} · {trial.meaning} · {trial.time.toFixed(3)} s</option>)}</select></label></div>
+          <div className="toolbar trial-pagination">
+            <button className="outline" disabled={busy || (averaged.trial_offset||0)===0}
+              onClick={()=>void compute(false,Math.max(0,(averaged.trial_offset||0)-100))}>
+              {t('Essais précédents')}</button>
+            <small>{t('Essais affichés')}: {(averaged.trial_offset||0)+1} –
+              {(averaged.trial_offset||0)+averaged.trials.length} / {averaged.n}</small>
+            <button className="outline" disabled={busy || averaged.next_offset===null ||
+              averaged.next_offset===undefined}
+              onClick={()=>void compute(false,averaged.next_offset||0)}>
+              {t('Essais suivants')}</button>
+          </div>
           <ScientificPlot title={t('Époque individuelle')} x={averaged.trial_time}
             yTitle={averaged.unit} series={[{name:t('Essai individuel'),
-              values:averaged.trials[Math.min(trialIndex,averaged.trials.length-1)].signal}]}/></>}
+              values:averaged.trials[Math.min(trialIndex,averaged.trials.length-1)].signal}]}/>
+          <div className="trial-review-card"><div>
+            <h4>{t('Revue des essais')}</h4>
+            <p>{t('Code trigger')}: {averaged.trials[trialIndex]?.code} ·
+              {t('Amplitude crête-à-crête')}: {averaged.trials[trialIndex]?.ptp?.toPrecision(5)} {averaged.unit} ·
+              RMS: {averaged.trials[trialIndex]?.rms?.toPrecision(5)} {averaged.unit}</p>
+            <p>{averaged.trials[trialIndex]?.review_rejected ?
+              t('Essai rejeté') + ': ' + averaged.trials[trialIndex]?.review_reason :
+              t('Essai conservé')}</p>
+          </div>
+            <label>{t('Motif du rejet')}<input aria-label={t('Motif du rejet')}
+              value={reviewReason} maxLength={180} onChange={e=>setReviewReason(e.target.value)}/></label>
+            <div className="button-row">
+              <button className="outline" disabled={busy || !averaged.trials[trialIndex]?.review_rejected}
+                onClick={()=>void decideTrial(false)}>{t('Réhabiliter cet essai')}</button>
+              <button className="primary" disabled={busy || !averaged.trials[trialIndex]?.event_uid}
+                onClick={()=>void decideTrial(true)}>{t('Rejeter cet essai')}</button>
+            </div>
+          </div></>}
         <button className="primary" onClick={exportEpochs}><Download size={15}/>{t('Exporter les époques CSV')}</button>
         {remote && <button className="outline" onClick={() => window.open(api.triggerNPZURL(
-          remote,viewCondition,tmin,tmax,baselineEnd,excludeMarked),'_blank','noopener,noreferrer')}>
+          remote,epochSnapshot?.condition||viewCondition,epochSnapshot?.tmin??tmin,
+          epochSnapshot?.tmax??tmax,epochSnapshot?.baselineEnd??baselineEnd,
+          epochSnapshot?.excludeMarked??excludeMarked,
+          epochSnapshot?.excludeRejected??excludeRejected),'_blank','noopener,noreferrer')}>
           <Download size={15}/>{t('Exporter toutes les voies (NPZ)')}</button>}
         <p className="note">{t('Les essais visibles sont un aperçu ; les exports Python sont en pleine résolution.')}</p>
       </div>}
@@ -402,7 +634,37 @@ export default function TriggerStudio({
         yTitle={comparisons[0].unit} series={comparisons.map(x=>({name:x.condition+' (n='+x.n+')',values:x.mean}))}/>
         <div className="trigger-chips">{comparisons.map(c=><span key={c.condition}>{c.condition}: {c.n}</span>)}</div></>}
       {!averaged&&!comparisons.length&&<p className="note">{t('Aucun essai calculé.')}</p>}
+      <div className="toolbar"><button className="outline" onClick={exportReviews}>
+        <Download size={15}/>{t('Export des décisions')}</button>
+        <small>{(info.trial_decisions||[]).length} {t('Essais rejetés')}</small></div>
       <p className="note">{t('Données brutes intactes')}</p>
+    </section>
+    <section className="panel">
+      <div className="panel-heading"><div><h3>05 · {t('Mesures par condition')}</h3>
+        <p>{t('Mesures descriptives seulement, sans test statistique.')}</p></div></div>
+      <div className="toolbar">
+        <label>{t('Début mesure (s)')}<input type="number" step=".01"
+          value={measurementStart} onChange={e=>setMeasurementStart(Number(e.target.value))}/></label>
+        <label>{t('Fin mesure (s)')}<input type="number" step=".01"
+          value={measurementEnd} onChange={e=>setMeasurementEnd(Number(e.target.value))}/></label>
+        <button className="primary" disabled={busy} onClick={()=>void calculateMetrics()}>
+          {t('Calculer les mesures')}</button>
+        <button className="outline" disabled={!metrics} onClick={exportMetrics}>
+          <Download size={15}/>{t('Exporter mesures CSV')}</button>
+      </div>
+      {metrics&&<div className="trigger-table"><table>
+        <thead><tr>
+          <th>{t('Condition')}</th><th>N</th><th>{t('Amplitude moyenne')}</th>
+          <th>{t('Pic')}</th><th>{t('Latence du pic')}</th>
+          <th>{t('Aire signée')}</th><th>{t('Essais exclus')}</th>
+        </tr></thead><tbody>{metrics.conditions.map(row=><tr key={row.condition}>
+          <td>{row.condition}</td><td>{row.n}</td>
+          <td>{row.mean_amplitude?.toPrecision(5)??'—'}</td>
+          <td>{row.peak_amplitude?.toPrecision(5)??'—'}</td>
+          <td>{row.peak_latency_s?.toFixed(4)??'—'} s</td>
+          <td>{row.auc?.toPrecision(5)??'—'}</td>
+          <td>{(row.excluded_bounds||0)+(row.excluded_manual||0)+(row.excluded_rejected||0)}</td>
+        </tr>)}</tbody></table></div>}
     </section>
   </div>
 }

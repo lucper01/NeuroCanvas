@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from engine import (Recording, load_recording, viewport, power_spectrum, spectrogram,
                     evoked, physiology, apply_pipeline)
 
-app = FastAPI(title="NeuroCanvas local scientific engine", version="0.3.0",
+app = FastAPI(title="NeuroCanvas local scientific engine", version="0.4.0",
               description="Local exploratory biosignal processing. Not for clinical use.")
 TRUSTED_ORIGINS = [
     "http://localhost:5173", "http://127.0.0.1:5173",
@@ -410,10 +410,14 @@ def trigger_event_list(key: str, condition: str = ""):
 @app.get("/api/sessions/{key}/triggers/epochs")
 def trigger_epochs(key: str, channel: str, condition: str = "",
                    tmin: float = -.2, tmax: float = .8,
-                   baseline_end: float = 0, exclude_marked: bool = False):
+                   baseline_end: float = 0, exclude_marked: bool = False,
+                   exclude_rejected: bool = False,
+                   trial_offset: int = Query(0, ge=0),
+                   trial_limit: int = Query(100, ge=1, le=200)):
     return guard(lambda: condition_epochs(
         session_or_404(key), channel, condition, tmin, tmax,
-        baseline_end, exclude_marked,
+        baseline_end, exclude_marked, max_trials=trial_limit,
+        exclude_rejected=exclude_rejected, trial_offset=trial_offset,
     ))
 
 
@@ -422,8 +426,9 @@ def export_trigger_events(key: str):
     rec = session_or_404(key)
     lines = io.StringIO()
     writer = csv.writer(lines)
+    from review import event_uid
     writer.writerow(["onset_s", "duration_s", "sample", "code", "label",
-                     "meaning", "conditions", "source"])
+                     "meaning", "conditions", "source", "event_uid"])
     for event in sorted(rec.events, key=lambda item: float(item["time"])):
         mapped = map_trigger(event, rec.trigger_definitions)
         writer.writerow([
@@ -432,6 +437,7 @@ def export_trigger_events(key: str):
             mapped["code"] if mapped["code"] is not None else "",
             event.get("label", ""), mapped["meaning"],
             "|".join(mapped["conditions"]), event.get("source", "manual"),
+            event_uid(rec, event),
         ])
     return StreamingResponse(iter([lines.getvalue()]), media_type="text/csv",
                              headers={"Content-Disposition": "attachment; filename=neurocanvas_triggers.csv"})
@@ -448,10 +454,12 @@ def export_trigger_codebook(key: str):
 @app.get("/api/sessions/{key}/triggers/export/epochs")
 def export_trigger_epochs(key: str, channel: str, condition: str = "",
                           tmin: float = -.2, tmax: float = .8,
-                          baseline_end: float = 0, exclude_marked: bool = False):
+                          baseline_end: float = 0, exclude_marked: bool = False,
+                          exclude_rejected: bool = False):
     rec = session_or_404(key)
     result = guard(lambda: condition_epochs(rec, channel, condition, tmin, tmax,
-                                            baseline_end, exclude_marked, max_trials=50000))
+                                            baseline_end, exclude_marked, max_trials=0,
+                                            exclude_rejected=exclude_rejected))
     if result["n"] > 1000 or result["n"] * len(result["time"]) > 1_000_000:
         raise HTTPException(422, "CSV epoch export is limited to 1 million values / 1000 epochs.")
     # Export the full underlying epochs, not the UI-decimated trial samples.
@@ -460,11 +468,13 @@ def export_trigger_epochs(key: str, channel: str, condition: str = "",
         stream = io.StringIO()
         writer = csv.writer(stream)
         writer.writerow(["trial_index", "condition", "code", "meaning", "onset_s",
-                         "relative_time_s", "amplitude", "unit"])
+                         "relative_time_s", "amplitude", "unit",
+                         "event_uid", "review_rejected", "review_reason"])
         yield stream.getvalue()
         stream.seek(0)
         stream.truncate()
-        for row in epoch_rows(rec, channel, condition, tmin, tmax, baseline_end, exclude_marked):
+        for row in epoch_rows(rec, channel, condition, tmin, tmax, baseline_end,
+                              exclude_marked, exclude_rejected):
             writer.writerow(row)
             yield stream.getvalue()
             stream.seek(0)
@@ -478,10 +488,83 @@ def export_trigger_epochs(key: str, channel: str, condition: str = "",
 def export_multichannel_epochs(key: str, condition: str = "",
                                tmin: float = -.2, tmax: float = .8,
                                baseline_end: float = 0,
-                               exclude_marked: bool = False):
+                               exclude_marked: bool = False,
+                               exclude_rejected: bool = False):
     from triggers import multichannel_epochs_npz
     result = guard(lambda: multichannel_epochs_npz(
-        session_or_404(key), condition, tmin, tmax, baseline_end, exclude_marked
+        session_or_404(key), condition, tmin, tmax, baseline_end, exclude_marked,
+        exclude_rejected
     ))
     return StreamingResponse(result, media_type="application/octet-stream",
                              headers={"Content-Disposition": "attachment; filename=neurocanvas_multichannel_epochs.npz"})
+
+
+
+# Single-trial research decisions and descriptive measurement reports.
+from review import event_uid, set_decision, decisions_export, condition_metrics
+
+
+class TrialReviewRequest(BaseModel):
+    event_uid: str = Field(min_length=1, max_length=120)
+    rejected: bool
+    reason: str = Field(default="", max_length=180)
+
+
+@app.post("/api/sessions/{key}/trials/review")
+def review_trial(key: str, body: TrialReviewRequest):
+    rec = session_or_404(key)
+    result = guard(lambda: set_decision(
+        rec, body.event_uid, body.rejected, body.reason
+    ))
+    return {**result, "metadata": rec.metadata()}
+
+
+@app.get("/api/sessions/{key}/trials/review")
+def trial_review_log(key: str):
+    return decisions_export(session_or_404(key))
+
+
+@app.get("/api/sessions/{key}/triggers/metrics")
+def trigger_metrics(key: str, channel: str,
+                    tmin: float = -.2, tmax: float = .8,
+                    measure_start: float = 0., measure_end: float = .3,
+                    baseline_end: float = 0.,
+                    exclude_marked: bool = False,
+                    exclude_rejected: bool = False):
+    return guard(lambda: condition_metrics(
+        session_or_404(key), channel, tmin, tmax,
+        measure_start, measure_end, baseline_end,
+        exclude_marked, exclude_rejected
+    ))
+
+
+@app.get("/api/sessions/{key}/triggers/export/metrics")
+def export_trigger_metrics(key: str, channel: str,
+                           tmin: float = -.2, tmax: float = .8,
+                           measure_start: float = 0., measure_end: float = .3,
+                           baseline_end: float = 0.,
+                           exclude_marked: bool = False,
+                           exclude_rejected: bool = False):
+    result = trigger_metrics(key, channel, tmin, tmax, measure_start, measure_end,
+                             baseline_end, exclude_marked, exclude_rejected)
+    stream = io.StringIO()
+    writer = csv.writer(stream)
+    writer.writerow([
+        "condition", "n", "status", "mean_amplitude", "peak_amplitude",
+        "peak_latency_s", "signed_auc", "unit", "codes",
+        "excluded_bounds", "excluded_manual", "excluded_rejected",
+        "measure_start_s", "measure_end_s", "exclude_marked", "exclude_rejected",
+    ])
+    for row in result["conditions"]:
+        writer.writerow([
+            row.get("condition"), row.get("n"), row.get("status"),
+            row.get("mean_amplitude"), row.get("peak_amplitude"),
+            row.get("peak_latency_s"), row.get("auc"), row.get("unit"),
+            json.dumps(row.get("codes", {}), sort_keys=True),
+            row.get("excluded_bounds"), row.get("excluded_manual"),
+            row.get("excluded_rejected"), measure_start, measure_end,
+            exclude_marked, exclude_rejected,
+        ])
+    return StreamingResponse(iter([stream.getvalue()]), media_type="text/csv",
+                             headers={"Content-Disposition":
+                                      "attachment; filename=neurocanvas_condition_metrics.csv"})

@@ -32,6 +32,7 @@ class Recording:
     bad_channels: list[str] = field(default_factory=list)
     bad_segments: list[dict] = field(default_factory=list)
     trigger_definitions: list[dict] = field(default_factory=list)
+    trial_decisions: list[dict] = field(default_factory=list)
 
     def __post_init__(self):
         self.original = np.asarray(self.original, dtype=np.float64)
@@ -69,6 +70,7 @@ class Recording:
             "bad_channels": list(self.bad_channels),
             "bad_segments": [dict(segment) for segment in self.bad_segments],
             "trigger_definitions": [dict(item) for item in self.trigger_definitions],
+            "trial_decisions": [dict(item) for item in self.trial_decisions],
         }
 
 

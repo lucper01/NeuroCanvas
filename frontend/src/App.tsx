@@ -383,7 +383,7 @@ export default function App() {
       success('Événement enregistré.')
     } catch (e) { error(e) }
   }
-  const exportMeta = () => saveBlob(JSON.stringify({ application: 'NeuroCanvas', version: '0.3.0', created_at: new Date().toISOString(),
+  const exportMeta = () => saveBlob(JSON.stringify({ application: 'NeuroCanvas', version: '0.4.0', created_at: new Date().toISOString(),
     info, method: remote ? 'Python/SciPy/MNE/NeuroKit2' : 'JavaScript / educational preview',
     signal_units: info?.channels.map(c => ({ name: c.name, unit: c.unit, type: c.type })) }, null, 2), 'application/json', 'neurocanvas_provenance.json')
   const exportCSV = (raw = false) => {
@@ -514,7 +514,7 @@ export default function App() {
         </div>
       </header>
       <div className="workspace">
-        <div className="page-heading"><div className="eyebrow">NEUROSCIENCE WORKBENCH / V0.3</div>
+        <div className="page-heading"><div className="eyebrow">NEUROSCIENCE WORKBENCH / V0.4</div>
           <h1>{tab === 'overview' ? 'Your signal workspace' : TABS.find(x => x.id === tab)?.title}</h1>
           <p>{tab === 'overview' ? 'Explorer, comprendre et transformer des signaux biomédicaux dans un même environnement.'
             : TABS.find(x => x.id === tab)?.subtitle}</p>
