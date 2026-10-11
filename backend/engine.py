@@ -31,6 +31,7 @@ class Recording:
     processed: np.ndarray | None = None
     bad_channels: list[str] = field(default_factory=list)
     bad_segments: list[dict] = field(default_factory=list)
+    trigger_definitions: list[dict] = field(default_factory=list)
 
     def __post_init__(self):
         self.original = np.asarray(self.original, dtype=np.float64)
@@ -67,6 +68,7 @@ class Recording:
             "warnings": sorted(set(self.warnings)), "history": self.steps,
             "bad_channels": list(self.bad_channels),
             "bad_segments": [dict(segment) for segment in self.bad_segments],
+            "trigger_definitions": [dict(item) for item in self.trigger_definitions],
         }
 
 
@@ -177,7 +179,7 @@ def load_recording(path: Path, sfreq: float | None, workdir: Path):
     annotations = []
     for a in raw.annotations:
         annotations.append({"time": float(a["onset"]), "duration": float(a["duration"]),
-                            "label": str(a["description"])})
+                            "label": str(a["description"]), "source": "annotation"})
     # For EDF/BDF/FIF acquisitions, event codes can be encoded on stim channels
     # rather than annotations; retain those event labels and sample positions.
     stim = [n for n, kind in zip(raw.ch_names, raw.get_channel_types()) if kind == "stim"]
@@ -187,7 +189,8 @@ def load_recording(path: Path, sfreq: float | None, workdir: Path):
                                     initial_event=True, verbose="ERROR")
             for sample, _, code in found:
                 annotations.append({"time": float((sample - raw.first_samp) / raw.info["sfreq"]),
-                                    "duration": 0.0, "label": str(int(code))})
+                                    "duration": 0.0, "label": str(int(code)),
+                                    "code": int(code), "source": "stim"})
         except (ValueError, RuntimeError):
             pass  # The visible stim channels remain importable even without events.
     annotations.sort(key=lambda ev: ev["time"])
