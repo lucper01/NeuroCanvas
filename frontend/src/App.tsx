@@ -7,11 +7,14 @@ import {
   Layers3, Menu, Monitor, Plus, RefreshCw, RotateCcw, Save, Settings2,
   ShieldCheck, SlidersHorizontal, Sparkles, Trash2, Wifi, WifiOff, X
 } from 'lucide-react'
-import type { Evoked, LocalRecording, RecordingInfo, Spectrum, Step, TimeFrequency, Trace } from './types'
+import type { Evoked, LocalRecording, QCReport, RecordingInfo, Spectrum, Step, TimeFrequency, Trace } from './types'
+import { qualityWindows, validateMarkedSegment } from './qc'
+import { loadPreferences, savePreferences, resolveLanguage, localizeTree } from './localization'
+import type { Preferences } from './localization'
 import { demo, importCSV, applySteps, viewport, spectrum, spectrogram, erp, fourier } from './engine'
 import { api } from './api'
 
-type Section = 'overview' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'advanced' | 'learning' | 'export' | 'help'
+type Section = 'overview' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'advanced' | 'artifact' | 'learning' | 'export' | 'help'
 const TABS: { id: Section; title: string; subtitle: string; icon: typeof Activity }[] = [
   { id: 'overview', title: 'Overview', subtitle: 'Tableau de bord', icon: Layers3 },
   { id: 'explorer', title: 'Signal Explorer', subtitle: 'Exploration temporelle', icon: Activity },
@@ -19,6 +22,7 @@ const TABS: { id: Section; title: string; subtitle: string; icon: typeof Activit
   { id: 'frequency', title: 'Frequency Lab', subtitle: 'Spectres & temps-fréquence', icon: ChartNoAxesCombined },
   { id: 'physiology', title: 'Neurophysiology', subtitle: 'ERP & biosignaux', icon: HeartPulse },
   { id: 'advanced', title: 'Advanced Analysis', subtitle: 'MNE · ICA · QC · HRV', icon: BrainCircuit },
+  { id: 'artifact', title: 'Artifact Review', subtitle: 'Contrôle qualité et exclusions', icon: ShieldCheck },
   { id: 'learning', title: 'Learning Studio', subtitle: 'Simulation pédagogique', icon: FlaskConical },
   { id: 'export', title: 'Export & Reproducibility', subtitle: 'Exports & provenance', icon: FileDown },
   { id: 'help', title: 'Documentation', subtitle: 'Méthodes & limites', icon: CircleHelp }
@@ -121,6 +125,25 @@ export default function App() {
   const [altChannel, setAltChannel] = useState('EEG Cz')
   const [editType, setEditType] = useState('eeg')
   const [editUnit, setEditUnit] = useState('µV')
+  const [preferences, setPreferences] = useState<Preferences>(loadPreferences)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [browserLanguage, setBrowserLanguage] = useState(() => typeof navigator !== 'undefined' ? navigator.language : 'en')
+  const locale = resolveLanguage(preferences.language, browserLanguage)
+  const [qcReport, setQcReport] = useState<QCReport | null>(null)
+  const [qcWindowSeconds, setQcWindowSeconds] = useState(2)
+  const [qcStart, setQcStart] = useState(4)
+  const [qcEnd, setQcEnd] = useState(5)
+  const [qcReason, setQcReason] = useState('Artéfact identifié visuellement')
+  const [excludeMarked, setExcludeMarked] = useState(false)
+  useEffect(() => {
+    savePreferences(preferences)
+    document.documentElement.lang = locale
+  }, [preferences, locale])
+  useEffect(() => {
+    const handleLanguageChange = () => setBrowserLanguage(navigator.language)
+    window.addEventListener('languagechange', handleLanguageChange)
+    return () => window.removeEventListener('languagechange', handleLanguageChange)
+  }, [])
   const fileInput = useRef<HTMLInputElement>(null)
   const sessionInput = useRef<HTMLInputElement>(null)
   const { notice, setNotice, error, success } = useNotice()
@@ -130,6 +153,8 @@ export default function App() {
   const steps = info?.history || []
   const events = useMemo(() => info?.events || [], [info])
   const selectedLabel = info?.name || 'Aucun enregistrement'
+  const badChannels = info?.bad_channels || []
+  const badSegments = info?.bad_segments || []
 
   const ping = useCallback(async () => {
     setChecking(true)
@@ -146,7 +171,7 @@ export default function App() {
     setChannel(newInfo.channels[0]?.name || '')
     setStart(0); setDuration(Math.min(10, newInfo.duration || 10))
     setEventLabel(newInfo.events[0]?.label || 'stimulus')
-    setTraces([]); setRawTraces([]); setPsd(null); setFftData(null); setTfr(null); setEvoked(null); setPhysio(null); setAdvancedOutput(null)
+    setQcReport(null); setExcludeMarked(false); setTraces([]); setRawTraces([]); setPsd(null); setFftData(null); setTfr(null); setEvoked(null); setPhysio(null); setAdvancedOutput(null)
   }
   const loadDemo = () => { const rec = demo(demoRate, 40, alpha, noise, demoTone); activate(rec.info, null, rec); success('Démonstration synthétique chargée.') }
   const loadPythonDemo = async () => {
@@ -360,7 +385,7 @@ export default function App() {
     return defs.map(b => ({ ...b, power: psd.frequency.reduce((sum, f, i) => sum + (f >= b.a && f < b.b ? psd.psd[i] * df : 0), 0) }))
   }, [psd])
 
-  return <div className="shell">
+  return localizeTree(<div className={'shell density-' + preferences.density}>
     <aside className={'sidebar ' + (menu ? 'visible' : '')}>
       <div className="brand"><div className="brand-mark"><Activity size={24} strokeWidth={2.2} /></div>
         <div><strong>NeuroCanvas</strong><span>SCIENTIFIC SIGNAL STUDIO</span></div>
@@ -384,11 +409,54 @@ export default function App() {
     </aside>
 
     {menu && <div className="overlay" onClick={() => setMenu(false)} />}
+    {settingsOpen && <div className="preferences-backdrop" role="presentation" onClick={() => setSettingsOpen(false)}>
+      <section className="preferences-panel" role="dialog" aria-modal="true" aria-label="Personnalisation"
+        onClick={event => event.stopPropagation()}>
+        <div className="preferences-top"><div><small>NEUROCANVAS / SETTINGS</small>
+          <h2>Personnalisation</h2></div>
+          <button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="Fermer"><X size={20}/></button>
+        </div>
+        <div className="preferences-content">
+          <div className="preferences-group"><h3>Langue de l’interface</h3>
+            <p>Langue détectée : {browserLanguage}. {locale.toUpperCase()}</p>
+            <div className="preference-options">
+              {([
+                { id:'auto', title:'Automatique (navigateur)', desc:'Automatic language detection' },
+                { id:'fr', title:'Français', desc:'Interface en français' },
+                { id:'en', title:'Anglais', desc:'English interface' }
+              ] as const).map(item => <label key={item.id} className={'preference-choice ' +
+                (preferences.language === item.id ? 'selected' : '')}>
+                <input type="radio" name="language" value={item.id}
+                  checked={preferences.language === item.id}
+                  onChange={() => setPreferences(prev => ({...prev,language:item.id}))}/>
+                <span><strong>{item.title}</strong><small>{item.desc}</small></span>
+              </label>)}
+            </div>
+          </div>
+          <div className="preferences-group"><h3>Densité de l’interface</h3>
+            <div className="preference-options horizontal">
+              {(['standard','compact'] as const).map(value=><label key={value}
+                className={'preference-choice ' + (preferences.density === value ? 'selected' : '')}>
+                <input type="radio" name="density" value={value}
+                  checked={preferences.density === value}
+                  onChange={() => setPreferences(prev => ({...prev,density:value}))}/>
+                <span><strong>{value === 'standard' ? 'Standard' : 'Compact'}</strong></span>
+              </label>)}
+            </div>
+          </div>
+          <p className="preferences-note">Préférences enregistrées sur cet appareil.</p>
+          <p className="preferences-note">La langue des enregistrements et des signaux ne sera pas modifiée.</p>
+        </div>
+        <button className="primary preferences-apply" onClick={() => setSettingsOpen(false)}>Appliquer</button>
+      </section>
+    </div>}
     <main className="main">
       <header className="topbar">
         <div className="top-left"><button className="mobile-menu icon-button" onClick={() => setMenu(true)} aria-label="Menu"><Menu size={22} /></button>
           <span className="breadcrumbs">Workspace <span>/</span> {TABS.find(x => x.id === tab)?.title}</span></div>
         <div className="top-right"><span className={'status-pill ' + (connected ? 'ready' : '')}>{connected ? 'PYTHON CONNECTED' : 'LOCAL BROWSER'}</span>
+          <button className="outline small personalization-button" title="Ouvrir les préférences" aria-label="Personnalisation"
+            onClick={() => setSettingsOpen(true)}><Settings2 size={16}/><span>Personnalisation</span><span className="language-mini">{locale.toUpperCase()}</span></button>
           <button className="primary small" onClick={() => fileInput.current?.click()}><FileUp size={15} /> Importer</button>
         </div>
       </header>
@@ -697,7 +765,7 @@ export default function App() {
       <label className="fs-control">Fs pour CSV sans temps (Hz)<input type="number" min=".01" placeholder="Automatique" value={fsInput} onChange={e=>setFsInput(e.target.value)}/></label>
       <button title="Importer une session JSON" className="outline" onClick={()=>sessionInput.current?.click()}><Save size={15}/> Session</button>
     </div>
-  </div>
+  </div>, locale)
 }
 function Metric({ title, value, sub, icon }: { title: string; value: string; sub: string; icon: ReactNode }) {
   return <div className="metric"><div className="metric-head"><span>{title}</span><span className="metric-icon">{icon}</span></div>
