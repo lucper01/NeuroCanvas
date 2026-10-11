@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import Plotly from 'plotly.js-dist-min'
 import {
@@ -14,6 +14,8 @@ import type { Preferences } from './localization'
 import { demo, importCSV, applySteps, viewport, spectrum, spectrogram, erp, fourier } from './engine'
 import { api } from './api'
 import TriggerStudio from './TriggerStudio'
+import NeuroDashboard from './NeuroDashboard'
+import { VisualThemeContext } from './VisualThemeContext'
 
 type Section = 'overview' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'advanced' | 'artifact' | 'triggers' | 'learning' | 'export' | 'help'
 const TABS: { id: Section; title: string; subtitle: string; icon: typeof Activity }[] = [
@@ -40,28 +42,56 @@ function Panel({ children, title, description, trailing, className = '' }: Panel
 function Plot({ traces, title, xTitle = 'Temps (s)', yTitle, shapes, heatmap = false, height = 350 }: {
   traces: unknown[]; title?: string; xTitle?: string; yTitle?: string; shapes?: unknown[]; heatmap?: boolean; height?: number
 }) {
+  const theme = useContext(VisualThemeContext)
   const div = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!div.current) return
     const node = div.current
     const layout: Record<string, unknown> = {
       autosize: true, height, margin: { l: 65, r: 18, t: title ? 48 : 20, b: 55 },
-      title: title ? { text: title, font: { size: 14, color: '#284a42' } } : undefined,
-      paper_bgcolor: '#fff', plot_bgcolor: '#fff',
-      xaxis: { title: { text: xTitle }, linecolor: '#cfded7', gridcolor: '#edf2ed', zeroline: false },
-      yaxis: { title: { text: yTitle || '' }, gridcolor: '#edf2ed', zeroline: false },
-      font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#61726d' },
+      title: title ? { text: title, font: { size: 14, color: theme === 'dark' ? '#e9f2ff' : '#284a42' } } : undefined,
+      paper_bgcolor: theme === 'dark' ? '#151c2a' : '#fff',
+      plot_bgcolor: theme === 'dark' ? '#151c2a' : '#fff',
+      xaxis: { title: { text: xTitle }, linecolor: theme === 'dark' ? '#3d4a60' : '#cfded7',
+        gridcolor: theme === 'dark' ? '#293548' : '#edf2ed', zeroline: false },
+      yaxis: { title: { text: yTitle || '' },
+        gridcolor: theme === 'dark' ? '#293548' : '#edf2ed', zeroline: false },
+      font: { family: 'Inter, system-ui, sans-serif', size: 11,
+        color: theme === 'dark' ? '#a6b7d2' : '#61726d' },
       hovermode: heatmap ? 'closest' : 'x unified', legend: { orientation: 'h', y: -0.25 },
       shapes: shapes || []
     }
     void Plotly.react(node, traces, layout, { responsive: true, displaylogo: false,
       modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d'] })
     return () => { Plotly.purge(node) }
-  }, [traces, title, xTitle, yTitle, shapes, heatmap, height])
+  }, [traces, title, xTitle, yTitle, shapes, heatmap, height, theme])
   const savePlot = async (format: 'png' | 'svg') => {
     if (!div.current) return
-    try { await Plotly.downloadImage(div.current, { format, filename: 'neurocanvas_figure', height, width: 1200, scale: format === 'png' ? 2 : 1 }) }
-    catch { /* Browser export can fail under strict CSP or embedded webviews. */ }
+    const node=div.current
+    let changed=false
+    try {
+      if (theme==='dark') {
+        await Plotly.relayout(node,{
+          paper_bgcolor:'#ffffff',plot_bgcolor:'#ffffff',
+          'font.color':'#304354','title.font.color':'#304354',
+          'xaxis.gridcolor':'#e5eaf0','yaxis.gridcolor':'#e5eaf0',
+          'xaxis.linecolor':'#b9c8d7'
+        })
+        changed=true
+      }
+      await Plotly.downloadImage(node,{format,filename:'neurocanvas_scientific_figure',
+        height,width:1200,scale:format==='png'?2:1})
+    } catch { /* Browser image export is optional and may be blocked by embedded webviews. */ }
+    finally {
+      if (changed) {
+        await Plotly.relayout(node,{
+          paper_bgcolor:'#151c2a',plot_bgcolor:'#151c2a',
+          'font.color':'#a6b7d2','title.font.color':'#e9f2ff',
+          'xaxis.gridcolor':'#293548','yaxis.gridcolor':'#293548',
+          'xaxis.linecolor':'#3d4a60'
+        }).catch(()=>{})
+      }
+    }
   }
   return <div className="plot-wrap"><div className="plot-actions">
     <button type="button" className="tiny" onClick={() => void savePlot('png')}>PNG</button>
@@ -85,7 +115,7 @@ function useNotice() {
   const success = useCallback((message: string) => setNotice({ message, kind: 'ok' }), [])
   return { notice, setNotice, error, success }
 }
-const COLORS = ['#187d68', '#bd8852', '#5479ad', '#ad6682', '#8573b8', '#56939a', '#a9a05f']
+const COLORS = ['#56c8f1', '#ad91ff', '#ff83ae', '#59dcb5', '#e7b97b', '#7baee8', '#c18ed3']
 
 export default function App() {
   const [tab, setTab] = useState<Section>('overview')
@@ -140,6 +170,8 @@ export default function App() {
   useEffect(() => {
     savePreferences(preferences)
     document.documentElement.lang = locale
+    document.documentElement.dataset.theme = preferences.theme
+    document.documentElement.style.colorScheme = preferences.theme
   }, [preferences, locale])
   useEffect(() => {
     const handleLanguageChange = () => setBrowserLanguage(navigator.language)
@@ -438,7 +470,7 @@ export default function App() {
     return defs.map(b => ({ ...b, power: psd.frequency.reduce((sum, f, i) => sum + (f >= b.a && f < b.b ? psd.psd[i] * df : 0), 0) }))
   }, [psd])
 
-  return localizeTree(<div className={'shell density-' + preferences.density}>
+  return <VisualThemeContext.Provider value={preferences.theme}>{localizeTree(<div className={'shell density-' + preferences.density + ' theme-' + preferences.theme}>
     <aside className={'sidebar ' + (menu ? 'visible' : '')}>
       <div className="brand"><div className="brand-mark"><Activity size={24} strokeWidth={2.2} /></div>
         <div><strong>NeuroCanvas</strong><span>SCIENTIFIC SIGNAL STUDIO</span></div>
@@ -486,6 +518,20 @@ export default function App() {
               </label>)}
             </div>
           </div>
+          <div className="preferences-group"><h3>Apparence</h3>
+            <p>Thème visuel</p>
+            <div className="preference-options horizontal">
+              {(['dark','light'] as const).map(value=><label key={value}
+                className={'preference-choice theme-preview-option ' + (preferences.theme === value ? 'selected' : '')}>
+                <input type="radio" name="theme" value={value}
+                  checked={preferences.theme===value}
+                  onChange={()=>setPreferences(prev=>({...prev,theme:value}))}/>
+                <span><strong>{value==='dark'?'Sombre':'Clair'}</strong>
+                  <small>{value==='dark'?'Neural Night':'Research Light'}</small></span>
+                <span aria-hidden="true" className={'theme-miniature theme-miniature-'+value}/>
+              </label>)}
+            </div>
+          </div>
           <div className="preferences-group"><h3>Densité de l’interface</h3>
             <div className="preference-options horizontal">
               {(['standard','compact'] as const).map(value=><label key={value}
@@ -525,34 +571,28 @@ export default function App() {
         <input type="file" ref={sessionInput} hidden accept=".json" onChange={onFile} />
 
         {tab === 'overview' && <>
-          <div className="intro-banner">
-            <div><span className="eyebrow light">EXPLORE THE UNSEEN</span><h2>From raw signals<br/>to scientific insight.</h2>
-              <p>Un espace interactif pour visualiser l'activité physiologique, explorer ses composantes et documenter chaque traitement.</p>
-              <div className="button-row"><button className="light-button" onClick={() => setTab('explorer')}>Explorer les signaux <span>→</span></button>
-                <button className="light-outline" onClick={() => fileInput.current?.click()}><FileUp size={16}/> Ajouter un fichier</button></div>
-            </div><div className="hero-graphic" aria-hidden="true"><svg viewBox="0 0 440 180" preserveAspectRatio="none">
-              {Array.from({ length: 4 }, (_, i) => <path key={i} d={Array.from({ length: 160 }, (_, j) => {
-                const x = j / 159 * 440
-                const y = 35 + i * 34 + 9 * Math.sin(j * .23 + i) + 6 * Math.sin(j * .48 + i * 2)
-                return (j ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1)
-              }).join(' ')} fill="none" stroke={['#bce5d4', '#c7d8a4', '#c7dfe1', '#efe6ac'][i]} strokeWidth="1.9" opacity=".9"/> )}
-              <line x1="276" x2="276" y1="0" y2="180" stroke="#e8ddac" strokeDasharray="3 5" opacity=".7"/>
-            </svg></div>
+          <NeuroDashboard locale={locale} info={info} traces={traces} psd={psd}
+            onExplore={()=>setTab('explorer')}
+            onImport={()=>fileInput.current?.click()}
+            onTriggers={()=>setTab('triggers')}/>
+          <div className="stats-grid">
+            <Metric title="Canaux actifs" value={String(channels.length)} sub="Voies disponibles" icon={<Activity size={20}/>}/>
+            <Metric title="Échantillonnage" value={format(sfreq,2)+' Hz'} sub="Fréquence nominale" icon={<ChartNoAxesCombined size={20}/>}/>
+            <Metric title="Durée totale" value={format(info?.duration||0,1)+' s'} sub="Temps enregistré" icon={<Monitor size={20}/>}/>
+            <Metric title="Événements" value={String(events.length)} sub="Marqueurs temporels" icon={<ClipboardList size={20}/>}/>
           </div>
-          <div className="stats-grid"><Metric title="Canaux actifs" value={String(channels.length)} sub="Voies disponibles" icon={<Activity size={20}/>}/>
-            <Metric title="Échantillonnage" value={format(sfreq, 2) + ' Hz'} sub="Fréquence nominale" icon={<ChartNoAxesCombined size={20}/>}/>
-            <Metric title="Durée totale" value={format(info?.duration || 0, 1) + ' s'} sub="Temps enregistré" icon={<Monitor size={20}/>}/>
-            <Metric title="Événements" value={String(events.length)} sub="Marqueurs temporels" icon={<ClipboardList size={20}/>}/></div>
           <div className="columns-main"><Panel title="Signal preview" description={selectedLabel}
-              trailing={<button className="text-button" onClick={() => setTab('explorer')}>Ouvrir <span>→</span></button>}>
-              <Plot traces={signalTraces} shapes={graphShapes} height={330} yTitle="Canaux normalisés et décalés" />
-            </Panel><Panel title="Start exploring" description="Actions rapides" className="right-panel">
+              trailing={<button className="text-button" onClick={()=>setTab('explorer')}>Ouvrir <span>→</span></button>}>
+              <Plot traces={signalTraces} shapes={graphShapes} height={340} yTitle="Canaux normalisés et décalés"/>
+            </Panel>
+            <Panel title="Start exploring" description="Actions rapides" className="right-panel">
               <div className="quick-actions">
                 <button onClick={loadDemo}><Sparkles size={20}/><span><strong>Signaux de démonstration</strong><small>EEG · ECG · EDA · RSP · EMG</small></span>→</button>
-                <button onClick={() => fileInput.current?.click()}><Database size={20}/><span><strong>Importer une acquisition</strong><small>CSV et formats scientifiques</small></span>→</button>
-                <button onClick={() => setTab('processing')}><Filter size={20}/><span><strong>Traitement des signaux</strong><small>Filtres, référence, correction</small></span>→</button>
-                <button onClick={() => setTab('learning')}><BrainCircuit size={20}/><span><strong>Laboratoire pédagogique</strong><small>Expérimenter les fréquences</small></span>→</button>
-              </div></Panel></div>
+                <button onClick={()=>fileInput.current?.click()}><Database size={20}/><span><strong>Importer une acquisition</strong><small>CSV · BDF · EDF · FIF</small></span>→</button>
+                <button onClick={()=>setTab('triggers')}><Activity size={20}/><span><strong>Trigger & Epoch Studio</strong><small>Événements · conditions · époques</small></span>→</button>
+                <button onClick={()=>setTab('processing')}><Filter size={20}/><span><strong>Traitement des signaux</strong><small>Filtres, référence, correction</small></span>→</button>
+              </div>
+            </Panel></div>
         </>}
 
         {['explorer', 'processing', 'frequency', 'physiology', 'advanced', 'artifact', 'triggers'].includes(tab) && <div className="data-bar">
@@ -898,7 +938,7 @@ export default function App() {
       <label className="fs-control">Fs pour CSV sans temps (Hz)<input type="number" min=".01" placeholder="Automatique" value={fsInput} onChange={e=>setFsInput(e.target.value)}/></label>
       <button title="Importer une session JSON" className="outline" onClick={()=>sessionInput.current?.click()}><Save size={15}/> Session</button>
     </div>
-  </div>, locale)
+  </div>, locale)}</VisualThemeContext.Provider>
 }
 function Metric({ title, value, sub, icon }: { title: string; value: string; sub: string; icon: ReactNode }) {
   return <div className="metric"><div className="metric-head"><span>{title}</span><span className="metric-icon">{icon}</span></div>
