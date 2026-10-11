@@ -11,6 +11,9 @@ This list distinguishes the existing code from **future scope**. Nothing in this
 - EDF/BDF/FIF/BrainVision/EEGLAB/ACQ and zipped-recording import.
 - Python filtering, interpolation warnings, provenance and data exports.
 - QC, coherence, MNE EEG PSD/epochs/ICA preview/montage and NeuroKit2 HRV.
+- Manual, reversible bad-segment and bad-channel review; opt-in exclusion when epoching.
+- Digital status trigger detection (integer-coded transitions, minimum width/spacing, optional bit mask), trigger codebook, many-to-one experimental condition grouping, conditional epochs, event/epoch CSV exports.
+- Browser-language FR/EN interface, persistent Personalization menu and standard/compact density.
 - Basic simulation-based unit tests.
 
 ## Priority next (not yet implemented)
