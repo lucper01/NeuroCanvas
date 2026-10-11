@@ -41,6 +41,9 @@ export function resolveLanguage(preference: LanguagePreference, browserLanguage?
  */
 const PAIRS: [string, string][] = [
   ['Personnalisation', 'Personalization'],
+  ['Paramètres d’importation', 'Import settings'],
+  ["Fréquence d'échantillonnage personnalisée pour les fichiers CSV sans colonne temporelle.",'Custom sampling frequency for CSV files without a time column.'],
+  ['Importer une session JSON', 'Import JSON session'],
   ['Apparence', 'Appearance'],
   ['Thème visuel', 'Visual theme'],
   ['Sombre', 'Dark'],
