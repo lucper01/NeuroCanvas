@@ -543,6 +543,18 @@ export default function App() {
               </label>)}
             </div>
           </div>
+          <div className="preferences-group import-preferences">
+            <h3>Paramètres d’importation</h3>
+            <p>Fréquence d'échantillonnage personnalisée pour les fichiers CSV sans colonne temporelle.</p>
+            <label className="import-fs-label">Fs pour CSV sans temps (Hz)
+              <input type="number" min=".01" step="any" placeholder="Automatique"
+                value={fsInput} onChange={e=>setFsInput(e.target.value)}/>
+            </label>
+            <button className="outline" onClick={()=>{
+              setSettingsOpen(false)
+              sessionInput.current?.click()
+            }}><Save size={15}/> Importer une session JSON</button>
+          </div>
           <p className="preferences-note">Préférences enregistrées sur cet appareil.</p>
           <p className="preferences-note">La langue des enregistrements et des signaux ne sera pas modifiée.</p>
         </div>
@@ -934,10 +946,6 @@ export default function App() {
       </div>
     </main>
     {busy && <div className="working" role="status"><RefreshCw className="spin" size={21}/> Traitement en cours…</div>}
-    <div className="floating-import" aria-label="Importation des signaux">
-      <label className="fs-control">Fs pour CSV sans temps (Hz)<input type="number" min=".01" placeholder="Automatique" value={fsInput} onChange={e=>setFsInput(e.target.value)}/></label>
-      <button title="Importer une session JSON" className="outline" onClick={()=>sessionInput.current?.click()}><Save size={15}/> Session</button>
-    </div>
   </div>, locale)}</VisualThemeContext.Provider>
 }
 function Metric({ title, value, sub, icon }: { title: string; value: string; sub: string; icon: ReactNode }) {
