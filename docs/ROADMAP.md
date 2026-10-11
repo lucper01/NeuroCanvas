@@ -14,6 +14,8 @@ This list distinguishes the existing code from **future scope**. Nothing in this
 - Manual, reversible bad-segment and bad-channel review; opt-in exclusion when epoching.
 - Digital status trigger detection (integer-coded transitions, minimum width/spacing, optional bit mask), trigger codebook, many-to-one experimental condition grouping, conditional epochs, event/epoch CSV exports.
 - Browser-language FR/EN interface, persistent Personalization menu and standard/compact density.
+- Per-trial reversible rejection decisions with justification, optionally respected by condition-locked epochs.
+- Paged trials, event-aligned heatmaps, signed area and peak measurements, condition-level CSV and a validated reusable JSON analysis protocol.
 - Basic simulation-based unit tests.
 
 ## Priority next (not yet implemented)
@@ -22,7 +24,7 @@ This list distinguishes the existing code from **future scope**. Nothing in this
 2. Electron/Tauri optional desktop distribution, with installation and environment bootstrap.
 3. True chunked/streaming and disk-backed handling of very large BDF/EDF/FIF datasets.
 4. Per-modality setup wizard for correct input units, orientation, channel types, sampling and sensor calibration.
-5. Data inspection and repair UI: segment-level exclusions, bad-channel marking, artifact log and reversible decisions.
+5. Large-scale disk-backed trial annotations and shared collaborative reviewer agreements (rather than current local, single-user review).
 6. EEG reference/interpolation workflows and sensor-space topographic maps with measured montage coordinates.
 7. Rich ICA component visualization, user decisions and annotated reports.
 8. NeuroKit2 event-related and interval-related EDA/RSP/ECG pipelines with publishable tables.
