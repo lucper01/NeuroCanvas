@@ -30,6 +30,33 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  browser:
+    name: Browser smoke tests (desktop and mobile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Build PWA
+        working-directory: frontend
+        run: npm run build
+      - name: Verify browser workflows
+        working-directory: frontend
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: frontend/test-results/
+
   backend:
     name: Python scientific tests
     runs-on: ubuntu-latest
