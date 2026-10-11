@@ -153,8 +153,6 @@ def condition_epochs(rec, channel, condition, tmin=-.2, tmax=.8, baseline_end=0.
     points = end - start + 1
     if not 16 <= points <= 20_000:
         raise ValueError("Epoch must contain 16 to 20,000 samples.")
-    if points * len(rec.events) > MAX_EPOCH_VALUES:
-        raise ValueError("Too many epoch samples. Narrow the interval or filter events.")
     if exclude_marked and channel in rec.bad_channels:
         raise ValueError("Selected channel is marked bad.")
     times = np.arange(start, end + 1) / rec.sfreq
@@ -182,6 +180,8 @@ def condition_epochs(rec, channel, condition, tmin=-.2, tmax=.8, baseline_end=0.
         if baseline_end > tmin and np.any(base):
             epoch -= epoch[base].mean()
         selected.append((mapped, epoch))
+        if len(selected) * points > MAX_EPOCH_VALUES:
+            raise ValueError("Too many selected epoch samples. Narrow the interval or filter conditions.")
     if not selected:
         raise ValueError("No valid epochs for this condition and time range.")
     data = np.vstack([epoch for _, epoch in selected])
@@ -238,3 +238,80 @@ def epoch_rows(rec, channel, condition, tmin, tmax, baseline_end, exclude_marked
             yield [accepted, "|".join(mapped["conditions"]), mapped["code"] or "",
                    mapped["meaning"], ev["time"], round(float(offset), 9),
                    float(value), rec.units[rec.names.index(channel)]]
+
+
+
+def multichannel_epochs_npz(rec, condition, tmin=-.2, tmax=.8,
+                           baseline_end=0., exclude_marked=False):
+    """Package event-aligned, multi-channel data into an NPZ.
+
+    Shape: (trials, channels, timepoints); records input units without scaling.
+    This function never alters raw or processed input arrays.
+    """
+    import io
+    import json
+
+    fs = rec.sfreq
+    if not np.isfinite(tmin) or not np.isfinite(tmax) or tmin >= tmax:
+        raise ValueError("Invalid epoch window.")
+    if not tmin <= baseline_end <= tmax:
+        raise ValueError("Baseline limit is outside selected epoch.")
+    first, last = int(round(tmin * fs)), int(round(tmax * fs))
+    n_time = last - first + 1
+    if not 16 <= n_time <= 20000:
+        raise ValueError("Epoch duration must be between 16 and 20,000 samples.")
+    picks = [i for i, typ in enumerate(rec.types)
+             if typ != "stim" and (not exclude_marked or rec.names[i] not in rec.bad_channels)]
+    if not picks:
+        raise ValueError("No physiological channels available for export.")
+    rows = []
+    trigger_labels = []
+    rejected_bounds = 0
+    rejected_marks = 0
+    time = np.arange(first, last + 1, dtype=float) / fs
+    base = (time >= tmin) & (time <= baseline_end)
+    for ev in rec.events:
+        mapped = map_trigger(ev, rec.trigger_definitions)
+        if condition and condition not in mapped["conditions"]:
+            continue
+        center = int(round(ev["time"] * fs))
+        a, b = center + first, center + last + 1
+        if a < 0 or b > rec.original.shape[1]:
+            rejected_bounds += 1
+            continue
+        if exclude_marked and any(
+            seg["start"] < b / fs and seg["end"] > a / fs for seg in rec.bad_segments
+        ):
+            rejected_marks += 1
+            continue
+        if (len(rows) + 1) * len(picks) * n_time > 10_000_000:
+            raise ValueError("NPZ export limited to 10 million values; shorten the window or choose a condition.")
+        epoch = rec.processed[picks, a:b].copy()
+        if baseline_end > tmin and base.any():
+            epoch -= np.mean(epoch[:, base], axis=1, keepdims=True)
+        rows.append(epoch)
+        trigger_labels.append({
+            "onset_s": mapped["time"], "code": mapped["code"],
+            "meaning": mapped["meaning"], "conditions": mapped["conditions"],
+        })
+    if not rows:
+        raise ValueError("No valid epochs for this condition.")
+    blob = io.BytesIO()
+    metadata = {
+        "recording": rec.name, "sfreq": fs,
+        "channels": [rec.names[i] for i in picks],
+        "types": [rec.types[i] for i in picks],
+        "units": [rec.units[i] for i in picks],
+        "shape": [len(rows), len(picks), n_time],
+        "condition": condition, "epochs": trigger_labels,
+        "excluded_bounds": rejected_bounds,
+        "excluded_manual": rejected_marks,
+        "exclude_marked": bool(exclude_marked),
+        "baseline": [tmin, baseline_end] if baseline_end > tmin else None,
+        "history": rec.steps, "trigger_definitions": rec.trigger_definitions,
+        "note": "Non-diagnostic output; input channel units preserved.",
+    }
+    np.savez_compressed(blob, epochs=np.stack(rows), times_s=time,
+                        metadata_json=np.asarray(json.dumps(metadata, ensure_ascii=False)))
+    blob.seek(0)
+    return blob
