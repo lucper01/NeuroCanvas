@@ -43,6 +43,7 @@ def guard(action):
 
 class ViewRequest(BaseModel):
     channels: list[str] = Field(default_factory=list)
+    raw: bool = False
     start: float = Field(default=0, ge=0)
     duration: float = Field(default=10, gt=0)
     max_points: int = Field(default=1500, ge=100, le=5000)
@@ -126,7 +127,7 @@ def metadata(key: str):
 @app.post("/api/sessions/{key}/viewport")
 def view(key: str, data: ViewRequest):
     return guard(lambda: viewport(session_or_404(key), data.channels,
-                                  data.start, data.duration, data.max_points))
+                                  data.start, data.duration, data.max_points, data.raw))
 
 
 @app.post("/api/sessions/{key}/pipeline")
