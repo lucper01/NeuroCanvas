@@ -352,7 +352,7 @@ def physiology(rec: Recording, channel: str, modality: str):
     return {"modality": modality, "channel": channel, "summary": measures,
             "markers": markers, "series": [
                 {"name": col, "time": (np.arange(0, len(signals), stride) / rec.sfreq).tolist(),
-                 "values": pd.to_numeric(signals[col].iloc[::stride], errors="coerce").replace(
-                     [np.inf, -np.inf], np.nan).where(lambda a: pd.notna(a), None).tolist()}
+                 "values": [float(v) if np.isfinite(v) else None for v in pd.to_numeric(
+                     signals[col].iloc[::stride], errors="coerce").to_numpy(dtype=float)]}
                 for col in wanted[:6]
             ], "software": "NeuroKit2", "sampling_rate": rec.sfreq}
