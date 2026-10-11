@@ -141,9 +141,11 @@ def commit_detected(rec, detected):
 
 
 def condition_epochs(rec, channel, condition, tmin=-.2, tmax=.8, baseline_end=0.,
-                     exclude_marked=False, max_trials=200, exclude_rejected=False):
+                     exclude_marked=False, max_trials=200, exclude_rejected=False, trial_offset=0):
     if channel not in rec.names:
         raise ValueError("Unknown channel.")
+    if not isinstance(trial_offset, int) or trial_offset < 0 or not 0 <= max_trials <= 200:
+        raise ValueError("Invalid trial page; limit must be 0–200.")
     if not np.isfinite(tmin) or not np.isfinite(tmax) or tmin >= tmax:
         raise ValueError("Epoch window must have tmin < tmax.")
     if not np.isfinite(baseline_end) or not tmin <= baseline_end <= tmax:
@@ -205,12 +207,16 @@ def condition_epochs(rec, channel, condition, tmin=-.2, tmax=.8, baseline_end=0.
         "ptp": float(np.ptp(epoch)),
         "mean_amplitude": float(np.mean(epoch)),
         "signal": epoch[::stride].tolist()
-    } for i, (mapped, epoch, uid, decision) in enumerate(selected[:max_trials])]
+    } for i, (mapped, epoch, uid, decision) in
+          enumerate(selected[trial_offset: trial_offset + max_trials], start=trial_offset)]
     return {
         "condition": condition, "channel": channel, "n": len(selected),
         "excluded_bounds": excluded_bounds, "excluded_manual": excluded_manual,
         "excluded_rejected": excluded_rejected,
         "codes": dict(sorted(Counter(str(mapped["code"]) for mapped, _, _, _ in selected).items())),
+        "trial_offset": trial_offset, "trial_limit": max_trials,
+        "next_offset": trial_offset + max_trials if max_trials and
+                       trial_offset + max_trials < len(selected) else None,
         "time": times.tolist(), "mean": mean.tolist(),
         "sem": sem.tolist() if sem is not None else None,
         "trial_time": times[::stride].tolist(), "trials": output_trials,
