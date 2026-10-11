@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { resolveLanguage, translateLabel, localizeTree } from './localization'
 import { createElement } from 'react'
 import { qualityWindows, validateMarkedSegment, overlapsSegment } from './qc'
