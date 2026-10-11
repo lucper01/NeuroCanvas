@@ -299,3 +299,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,
   .neuro-command-footer{flex-wrap:wrap}.neuro-wave-row{grid-template-columns:82px minmax(0,1fr)}
   .theme-dark .top-right{gap:7px}.theme-dark .personalization-button{padding:7px!important}}
 @media(prefers-reduced-motion:reduce){.neuro-band-card,.theme-dark .nav-link{transition:none}}
+
+
+/* Sampling rate and session import live in Settings, never on top of plots. */
+.import-preferences{border-top:1px solid #354257;margin-top:10px}
+.import-fs-label{display:flex;flex-direction:column;gap:8px;max-width:250px;font-size:11px;font-weight:700;margin:12px 0;color:inherit}
+.import-fs-label input{border-radius:8px;padding:9px 11px;width:100%;min-height:38px}
+.import-preferences>button{display:inline-flex;align-items:center;gap:8px}
+.theme-light .import-preferences{border-color:#e0e9e3}
