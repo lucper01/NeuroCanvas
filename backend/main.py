@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from engine import (Recording, load_recording, viewport, power_spectrum, spectrogram,
                     evoked, physiology, apply_pipeline)
 
-app = FastAPI(title="NeuroCanvas local scientific engine", version="0.1.0",
+app = FastAPI(title="NeuroCanvas local scientific engine", version="0.3.0",
               description="Local exploratory biosignal processing. Not for clinical use.")
 TRUSTED_ORIGINS = [
     "http://localhost:5173", "http://127.0.0.1:5173",
