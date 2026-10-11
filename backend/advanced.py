@@ -46,6 +46,8 @@ def fft_amplitude(recording, channel, start=0, duration=None):
     values = recording.processed[recording.names.index(channel), lo:hi]
     if len(values) < 16:
         raise ValueError("Select at least 16 samples.")
+    if len(values) > 65536:
+        raise ValueError("Select an FFT window of at most 65536 samples.")
     taper = np.hanning(len(values))
     Fourier = np.fft.rfft((values - np.mean(values)) * taper)
     amplitudes = np.abs(Fourier) * 2 / np.sum(taper)
@@ -64,11 +66,12 @@ def coherence_report(recording, first, second, start=0, duration=30):
     fs = recording.sfreq
     a = max(0, int(start * fs))
     b = min(recording.original.shape[1], int((start + duration) * fs))
-    if b - a < 64:
-        raise ValueError("Coherence requires at least 64 samples.")
+    if b - a < 256:
+        raise ValueError("Coherence requires at least 256 samples and several Welch segments.")
     x = recording.processed[recording.names.index(first), a:b]
     y = recording.processed[recording.names.index(second), a:b]
-    f, coh = signal.coherence(x, y, fs=fs, nperseg=min(2048, len(x)))
+    nperseg = min(1024, max(64, len(x) // 4))
+    f, coh = signal.coherence(x, y, fs=fs, nperseg=nperseg, noverlap=nperseg // 2)
     return {"frequency": f.tolist(), "coherence": coh.tolist(),
             "first": first, "second": second,
             "description": "Magnitude-squared coherence (Welch), non-directional association; not causality."}
@@ -178,6 +181,7 @@ def ica_preview(recording, n_components=10, max_seconds=120):
               max_iter=500, verbose="ERROR")
     ica.fit(raw, verbose="ERROR")
     fractions = ica.get_explained_variance_ratio(raw, components=list(range(ica.n_components_)))
+    fractions = {str(key): float(value) for key, value in fractions.items()}
     return {"component_count": int(ica.n_components_), "explained_variance_ratio": fractions,
             "excluded": [], "method": "MNE FastICA on temporary 1 Hz high-pass copy",
             "warning": "No components were automatically removed. Visual inspection and a validated artifact protocol are essential."}
