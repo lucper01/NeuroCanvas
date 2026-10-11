@@ -1,6 +1,6 @@
 {
   "name": "neurocanvas",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "predev": "node scripts/generate-icons.mjs",
     "prebuild": "node scripts/generate-icons.mjs",
-    "test": "vitest run src/engine.test.ts",
+    "test": "vitest run src",
     "test:e2e": "playwright test"
   },
   "dependencies": {

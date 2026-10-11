@@ -16,3 +16,77 @@ button.primary,button.outline{border-radius:9px;display:inline-flex;align-items:
 @media(max-width:650px){.topbar{height:65px;padding:0 14px}.breadcrumbs{font-size:10px}.status-pill{display:none}.workspace{padding:21px 13px 90px}.page-heading h1{font-size:24px}.intro-banner{padding:25px;min-height:280px}.intro-banner h2{font-size:25px}.intro-banner p{font-size:11px}.hero-graphic{width:100%;right:-120px;top:45px}.stats-grid{gap:8px}.metric{padding:15px}.metric>strong{font-size:18px}.panel{padding:15px}.data-bar{align-items:start;flex-direction:column}.learning-grid,.export-grid,.help-grid{grid-template-columns:1fr}.band-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.floating-import{bottom:5px;right:5px}.footer{font-size:8px}}
 
 .scroll-table{overflow:auto;max-height:470px;margin:12px 0}.scroll-table table{border-collapse:collapse;width:100%;min-width:580px;font-size:11px}.scroll-table th,.scroll-table td{padding:10px 13px;text-align:left;border-bottom:1px solid #e9f0e9}.scroll-table th{background:#f0f6f1;color:#386e55;position:sticky;top:0}.scroll-table td{color:#62776b}
+
+
+/* Bilingual personalization, local-only settings. */
+.personalization-button{gap:7px!important}
+.language-mini{background:#e5eee6;color:#236e53;border-radius:5px;padding:3px 5px;font-size:9px;font-weight:800}
+.preferences-backdrop{position:fixed;inset:0;background:#0f2f25aa;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+.preferences-panel{background:#fff;color:#234737;border:1px solid #dce9dd;border-radius:16px;width:min(480px,100%);max-height:calc(100vh - 32px);overflow-y:auto;box-shadow:0 18px 75px #0a2a2150;padding:22px}
+.preferences-top{display:flex;align-items:start;justify-content:space-between;gap:12px;border-bottom:1px solid #e3ede7;padding-bottom:14px}
+.preferences-top small{color:#829a8c;font-size:10px;font-weight:800;letter-spacing:1.4px}
+.preferences-top h2{font-size:20px;margin:7px 0 0;letter-spacing:-.6px}
+.preferences-content{padding:9px 0}
+.preferences-group{padding:15px 0}
+.preferences-group h3{font-size:13px;margin:0 0 7px}
+.preferences-group p{color:#7a9483;font-size:11px;margin:0 0 11px}
+.preference-options{display:flex;flex-direction:column;gap:8px}
+.preference-options.horizontal{flex-direction:row}
+.preference-choice{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e3eae1;border-radius:10px;cursor:pointer;background:#fcfdfa;flex:1}
+.preference-choice.selected{border-color:#3c9270;background:#eef8ee}
+.preference-choice input{accent-color:#247553}
+.preference-choice strong,.preference-choice small{display:block}
+.preference-choice strong{font-size:12px}
+.preference-choice small{font-size:10px;color:#83968a;margin-top:4px}
+.preferences-note{font-size:10px;color:#8b9c90;line-height:1.6;margin:7px 0}
+.preferences-apply{width:100%;margin-top:10px}
+.density-compact .panel{padding:12px 14px;margin-bottom:9px}
+.density-compact .workspace{padding-top:18px}
+.density-compact .metric{padding:11px 13px}
+.density-compact .nav-link{min-height:35px}
+.density-compact .page-heading{margin-bottom:15px}
+.density-compact .channel-row{padding:7px 0}
+
+/* Manual artifact review: window metrics and curation table. */
+.qc-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+.qc-stats>div{border:1px solid #e0e9df;background:#f8fbf7;border-radius:9px;padding:11px}
+.qc-stats strong,.qc-stats small{display:block}
+.qc-stats strong{font-family:Manrope,sans-serif;font-size:19px;color:#236a52}
+.qc-stats small{font-size:10px;color:#84968c;line-height:1.5}
+.qc-table{max-height:260px;overflow:auto;border:1px solid #e3ece6;border-radius:9px}
+.qc-table table{border-collapse:collapse;width:100%;font-size:11px}
+.qc-table th{position:sticky;top:0;background:#f0f5f0;text-align:left;color:#426e5a;padding:10px}
+.qc-table td{padding:9px 10px;border-top:1px solid #ecf0eb;color:#547363}
+.qc-table tbody tr{cursor:pointer}
+.qc-table tbody tr:hover{background:#f0f7ee}
+.qc-table tr.qc-flagged{background:#fff6ec}
+@media(max-width:750px){.personalization-button span:not(.language-mini){display:none}.preferences-panel{padding:17px}.qc-stats{gap:6px}.qc-stats>div{padding:8px}.qc-stats strong{font-size:15px}}
+
+
+/* Trigger & Epoch Studio, responsive codebook, pulse inspector and trial plots. */
+.trigger-studio{min-width:0}
+.trigger-intro{background:#e9f4ec;border:1px solid #cfe5d3;padding:18px 21px;border-radius:12px;display:flex;gap:14px;align-items:center;margin:0 0 18px;color:#227151}
+.trigger-intro div{flex:1}
+.trigger-intro strong{font-family:Manrope,sans-serif;color:#194a39;font-size:16px}
+.trigger-intro p{margin:5px 0 0;font-size:11px;color:#5e8170}
+.trigger-chip{background:#e0f0e4;border-radius:30px;padding:6px 9px;font-size:9px;color:#28694e;font-weight:800;letter-spacing:1px}
+.trigger-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:15px 0}
+.trigger-stats>div{border:1px solid #e0ebe3;background:#f7faf7;border-radius:10px;padding:13px}
+.trigger-stats strong{display:block;color:#286f52;font-size:22px;font-family:Manrope,sans-serif}
+.trigger-stats small{display:block;color:#81988a;font-size:10px;margin-top:5px}
+.trigger-chips{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+.trigger-chips span{border:1px solid #d6e6d8;background:#f3f8f3;color:#3d7258;border-radius:6px;padding:7px 10px;font-size:10px}
+.trigger-table{overflow:auto;max-height:440px;border:1px solid #dfebe2;border-radius:10px;margin:14px 0}
+.trigger-table.small{max-height:290px}
+.trigger-table table{width:100%;border-collapse:collapse;min-width:690px}
+.trigger-table th{position:sticky;top:0;background:#edf5ee;color:#446f57;z-index:2;text-align:left;font-size:10px;letter-spacing:.2px;padding:11px}
+.trigger-table td{padding:9px 11px;border-bottom:1px solid #ebf1eb;color:#446456;font-size:11px}
+.trigger-table td strong{font-size:11px}
+.trigger-table input:not([type=checkbox]){width:100%;border:1px solid #dce9dd;border-radius:7px;padding:8px 10px;background:#fff;color:#2e5c45;font-size:11px;min-width:135px}
+.trigger-table input[type=checkbox]{accent-color:#2a8261}
+.trigger-studio .toolbar{align-items:flex-end}
+.trigger-studio .toolbar label{max-width:260px}
+.trigger-studio .toolbar label input{max-width:220px}
+.trigger-group{background:#f7faf7;padding:13px;border-radius:10px;border:1px solid #e4eee5}
+.trigger-plot{width:100%;min-height:290px;overflow:hidden}
+@media(max-width:650px){.trigger-stats{gap:6px}.trigger-stats>div{padding:10px 7px}.trigger-stats strong{font-size:18px}.trigger-intro{padding:13px}.trigger-studio .toolbar label{max-width:100%}}

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from engine import (Recording, load_recording, viewport, power_spectrum, spectrogram,
                     evoked, physiology, apply_pipeline)
 
-app = FastAPI(title="NeuroCanvas local scientific engine", version="0.1.0",
+app = FastAPI(title="NeuroCanvas local scientific engine", version="0.3.0",
               description="Local exploratory biosignal processing. Not for clinical use.")
 TRUSTED_ORIGINS = [
     "http://localhost:5173", "http://127.0.0.1:5173",
@@ -110,13 +110,24 @@ def create_demo():
     rsp = np.sin(2 * np.pi * .23 * t) + rng.normal(0, .025, len(t))
     emg = .04 * rng.standard_normal(len(t))
     emg[(t > 12) & (t < 15)] *= 5
+    ttl = np.zeros(len(t))
+    codes = [11, 12, 21, 22, 11, 12, 21]
+    for onset, code in zip((5, 10, 15, 20, 25, 30, 35), codes):
+        sample = int(round(onset * fs))
+        ttl[sample:sample + 3] = code
     rec = Recording("Synthetic training signals (not human data)",
-                    np.stack([eeg, ecg, eda, rsp, emg]), fs,
-                    ["EEG Fz", "ECG", "EDA", "RSP", "EMG"],
-                    ["eeg", "ecg", "misc", "resp", "emg"],
-                    ["V", "a.u.", "a.u.", "a.u.", "a.u."], "synthetic",
+                    np.stack([eeg, ecg, eda, rsp, emg, ttl]), fs,
+                    ["EEG Fz", "ECG", "EDA", "RSP", "EMG", "TRIGGER TTL"],
+                    ["eeg", "ecg", "misc", "resp", "emg", "stim"],
+                    ["V", "a.u.", "a.u.", "a.u.", "a.u.", "code"], "synthetic",
                     events=[{"time": float(k), "duration": 0, "label": "stimulus"}
                             for k in (5, 10, 15, 20, 25, 30, 35)])
+    rec.trigger_definitions = [
+        {"code":11,"meaning":"Visual standard","conditions":["Visual"]},
+        {"code":12,"meaning":"Visual deviant","conditions":["Visual"]},
+        {"code":21,"meaning":"Auditory standard","conditions":["Auditory"]},
+        {"code":22,"meaning":"Auditory deviant","conditions":["Auditory"]},
+    ]
     key = uuid.uuid4().hex
     if len(SESSIONS) >= 6:
         SESSIONS.pop(next(iter(SESSIONS)))
@@ -151,8 +162,10 @@ def tfr(key: str, channel: str, start: float = 0, duration: float = 30):
 
 
 @app.get("/api/sessions/{key}/erp")
-def erp(key: str, channel: str, label: str = "", tmin: float = -0.2, tmax: float = 0.8):
-    return guard(lambda: evoked(session_or_404(key), channel, label, tmin, tmax))
+def erp(key: str, channel: str, label: str = "", tmin: float = -0.2, tmax: float = 0.8,
+        exclude_marked: bool = False):
+    return guard(lambda: evoked(session_or_404(key), channel, label, tmin, tmax,
+                                exclude_marked=exclude_marked))
 
 
 @app.get("/api/sessions/{key}/physiology")
@@ -251,9 +264,10 @@ def mne_psd(key: str, start: float = 0, duration: float = 30, fmin: float = 1, f
 
 @app.get("/api/sessions/{key}/mne/epochs")
 def mne_erp(key: str, label: str, tmin: float = -.2, tmax: float = .8,
-            reject_peak_uv: float | None = None):
+            reject_peak_uv: float | None = None, exclude_marked: bool = False):
     return guard(lambda: mne_epochs(session_or_404(key), label, tmin, tmax,
-                                    reject_peak_uv=reject_peak_uv))
+                                    reject_peak_uv=reject_peak_uv,
+                                    exclude_marked=exclude_marked))
 
 
 @app.get("/api/sessions/{key}/mne/montage")
@@ -269,3 +283,205 @@ def ica(key: str, n_components: int = Query(10, ge=2, le=20)):
 @app.get("/api/sessions/{key}/neurokit/hrv")
 def hrv(key: str, channel: str):
     return guard(lambda: nk_hrv(session_or_404(key), channel))
+
+
+# Curated QC decisions are metadata only. No original samples are overwritten.
+from advanced import windowed_quality
+
+
+class MarkedSegment(BaseModel):
+    start: float = Field(ge=0)
+    end: float = Field(gt=0)
+    reason: str = Field(min_length=2, max_length=180)
+
+
+class MarkedChannel(BaseModel):
+    name: str = Field(min_length=1, max_length=180)
+    marked: bool = True
+
+
+@app.get("/api/sessions/{key}/qc/windows")
+def quality_windows(key: str, window_seconds: float = Query(2.0, ge=0.2, le=60),
+                    channel: str | None = None):
+    return guard(lambda: windowed_quality(
+        session_or_404(key), window_seconds, channel,
+    ))
+
+
+@app.post("/api/sessions/{key}/qc/segments")
+def add_bad_segment(key: str, body: MarkedSegment):
+    recording = session_or_404(key)
+    if body.start >= body.end or body.end > recording.duration + 1 / recording.sfreq:
+        raise HTTPException(422, "Invalid segment bounds.")
+    if len(recording.bad_segments) >= 500:
+        raise HTTPException(422, "Maximum 500 marked segments per recording.")
+    recording.bad_segments.append(body.model_dump())
+    recording.bad_segments.sort(key=lambda item: item["start"])
+    return recording.metadata()
+
+
+@app.delete("/api/sessions/{key}/qc/segments/{index}")
+def remove_bad_segment(key: str, index: int):
+    recording = session_or_404(key)
+    if not 0 <= index < len(recording.bad_segments):
+        raise HTTPException(404, "Unknown marked-segment index.")
+    recording.bad_segments.pop(index)
+    return recording.metadata()
+
+
+@app.post("/api/sessions/{key}/qc/channels")
+def mark_bad_channel(key: str, body: MarkedChannel):
+    recording = session_or_404(key)
+    if body.name not in recording.names:
+        raise HTTPException(422, "Unknown channel name.")
+    recording.bad_channels = [
+        name for name in recording.bad_channels if name != body.name
+    ]
+    if body.marked:
+        recording.bad_channels.append(body.name)
+    return recording.metadata()
+
+
+@app.get("/api/sessions/{key}/qc/export")
+def export_qc(key: str):
+    recording = session_or_404(key)
+    return {"recording": recording.name,
+            "sfreq": recording.sfreq,
+            "bad_channels": recording.bad_channels,
+            "bad_segments": recording.bad_segments,
+            "note": "Manual decisions, not automatically established artifacts."}
+
+
+# Trigger detection and experimental-condition model.
+from triggers import (detect_triggers, validate_definitions, commit_detected,
+                      condition_epochs, map_trigger)
+
+
+class TriggerDefinition(BaseModel):
+    code: int = Field(ge=1, le=16777215)
+    meaning: str = Field(min_length=1, max_length=180)
+    conditions: list[str] = Field(default_factory=list, max_length=16)
+
+
+class TriggerCodebook(BaseModel):
+    definitions: list[TriggerDefinition] = Field(default_factory=list, max_length=2000)
+
+
+class TriggerDetection(BaseModel):
+    channel: str = Field(min_length=1)
+    bit_mask: int | None = Field(default=None, ge=1, le=16777215)
+    min_width_ms: float = Field(default=0, ge=0, le=1000)
+    min_interval_ms: float = Field(default=0, ge=0, le=5000)
+    tolerance: float = Field(default=.25, ge=0, le=.49)
+    commit: bool = False
+
+
+@app.put("/api/sessions/{key}/triggers/codebook")
+def update_trigger_codebook(key: str, body: TriggerCodebook):
+    rec = session_or_404(key)
+    rec.trigger_definitions = guard(lambda: validate_definitions([
+        item.model_dump() for item in body.definitions
+    ]))
+    return rec.metadata()
+
+
+@app.post("/api/sessions/{key}/triggers/detect")
+def trigger_detector(key: str, body: TriggerDetection):
+    rec = session_or_404(key)
+    detection = guard(lambda: detect_triggers(
+        rec, body.channel, body.min_width_ms, body.min_interval_ms, body.tolerance, body.bit_mask,
+    ))
+    if body.commit:
+        detection["commit"] = commit_detected(rec, detection)
+        detection["metadata"] = rec.metadata()
+    return detection
+
+
+@app.get("/api/sessions/{key}/triggers/events")
+def trigger_event_list(key: str, condition: str = ""):
+    rec = session_or_404(key)
+    events = [map_trigger(ev, rec.trigger_definitions) for ev in rec.events]
+    if condition:
+        events = [ev for ev in events if condition in ev["conditions"]]
+    return {"events": events, "count": len(events), "condition": condition,
+            "conditions": sorted({c for d in rec.trigger_definitions for c in d["conditions"]})}
+
+
+@app.get("/api/sessions/{key}/triggers/epochs")
+def trigger_epochs(key: str, channel: str, condition: str = "",
+                   tmin: float = -.2, tmax: float = .8,
+                   baseline_end: float = 0, exclude_marked: bool = False):
+    return guard(lambda: condition_epochs(
+        session_or_404(key), channel, condition, tmin, tmax,
+        baseline_end, exclude_marked,
+    ))
+
+
+@app.get("/api/sessions/{key}/triggers/export/events")
+def export_trigger_events(key: str):
+    rec = session_or_404(key)
+    lines = io.StringIO()
+    writer = csv.writer(lines)
+    writer.writerow(["onset_s", "duration_s", "sample", "code", "label",
+                     "meaning", "conditions", "source"])
+    for event in sorted(rec.events, key=lambda item: float(item["time"])):
+        mapped = map_trigger(event, rec.trigger_definitions)
+        writer.writerow([
+            event["time"], event.get("duration", 0),
+            int(round(float(event["time"]) * rec.sfreq)),
+            mapped["code"] if mapped["code"] is not None else "",
+            event.get("label", ""), mapped["meaning"],
+            "|".join(mapped["conditions"]), event.get("source", "manual"),
+        ])
+    return StreamingResponse(iter([lines.getvalue()]), media_type="text/csv",
+                             headers={"Content-Disposition": "attachment; filename=neurocanvas_triggers.csv"})
+
+
+@app.get("/api/sessions/{key}/triggers/export/codebook")
+def export_trigger_codebook(key: str):
+    rec = session_or_404(key)
+    return {"definitions": rec.trigger_definitions,
+            "conditions": sorted({c for d in rec.trigger_definitions for c in d["conditions"]}),
+            "recording": rec.name, "sfreq": rec.sfreq}
+
+
+@app.get("/api/sessions/{key}/triggers/export/epochs")
+def export_trigger_epochs(key: str, channel: str, condition: str = "",
+                          tmin: float = -.2, tmax: float = .8,
+                          baseline_end: float = 0, exclude_marked: bool = False):
+    rec = session_or_404(key)
+    result = guard(lambda: condition_epochs(rec, channel, condition, tmin, tmax,
+                                            baseline_end, exclude_marked, max_trials=50000))
+    if result["n"] > 1000 or result["n"] * len(result["time"]) > 1_000_000:
+        raise HTTPException(422, "CSV epoch export is limited to 1 million values / 1000 epochs.")
+    # Export the full underlying epochs, not the UI-decimated trial samples.
+    from triggers import epoch_rows
+    def rows():
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(["trial_index", "condition", "code", "meaning", "onset_s",
+                         "relative_time_s", "amplitude", "unit"])
+        yield stream.getvalue()
+        stream.seek(0)
+        stream.truncate()
+        for row in epoch_rows(rec, channel, condition, tmin, tmax, baseline_end, exclude_marked):
+            writer.writerow(row)
+            yield stream.getvalue()
+            stream.seek(0)
+            stream.truncate()
+    return StreamingResponse(rows(), media_type="text/csv",
+                             headers={"Content-Disposition": "attachment; filename=neurocanvas_epochs.csv"})
+
+
+
+@app.get("/api/sessions/{key}/triggers/export/multichannel")
+def export_multichannel_epochs(key: str, condition: str = "",
+                               tmin: float = -.2, tmax: float = .8,
+                               baseline_end: float = 0,
+                               exclude_marked: bool = False):
+    from triggers import multichannel_epochs_npz
+    result = guard(lambda: multichannel_epochs_npz(
+        session_or_404(key), condition, tmin, tmax, baseline_end, exclude_marked
+    ))
+    return StreamingResponse(result, media_type="application/octet-stream",
+                             headers={"Content-Disposition": "attachment; filename=neurocanvas_multichannel_epochs.npz"})

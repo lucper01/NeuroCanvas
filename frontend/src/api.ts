@@ -36,8 +36,8 @@ export const api = {
     call<Spectrum>('/sessions/' + encoded(id) + '/psd?channel=' + encoded(name) + '&start=' + start + '&duration=' + duration),
   spectrogram: (id: string, name: string, start: number, duration: number) =>
     call<TimeFrequency>('/sessions/' + encoded(id) + '/spectrogram?channel=' + encoded(name) + '&start=' + start + '&duration=' + duration),
-  erp: (id: string, channel: string, label: string, tmin: number, tmax: number) =>
-    call<Evoked>('/sessions/' + encoded(id) + '/erp?channel=' + encoded(channel) + '&label=' + encoded(label) + '&tmin=' + tmin + '&tmax=' + tmax),
+  erp: (id: string, channel: string, label: string, tmin: number, tmax: number, excludeMarked = false) =>
+    call<Evoked>('/sessions/' + encoded(id) + '/erp?channel=' + encoded(channel) + '&label=' + encoded(label) + '&tmin=' + tmin + '&tmax=' + tmax + '&exclude_marked=' + excludeMarked),
   physiology: (id: string, channel: string, modality: string) =>
     call<{ modality: string; channel: string; summary: Record<string, number>; markers: Record<string, number[]>; series: { name: string; time: number[]; values: (number | null)[] }[]; software: string }>(
       '/sessions/' + encoded(id) + '/physiology?channel=' + encoded(channel) + '&modality=' + encoded(modality)),
@@ -61,9 +61,9 @@ export const api = {
   mnePSD: (id: string, start: number, duration: number) =>
     call<{ channels: string[]; frequency: number[]; power: number[][]; unit: string; method: string }>(
       '/sessions/' + encoded(id) + '/mne/psd?start=' + start + '&duration=' + duration),
-  mneEpochs: (id: string, label: string) =>
+  mneEpochs: (id: string, label: string, excludeMarked = false) =>
     call<{ time: number[]; channels: string[]; average: number[][]; n: number; excluded: number; unit: string }>(
-      '/sessions/' + encoded(id) + '/mne/epochs?label=' + encoded(label)),
+      '/sessions/' + encoded(id) + '/mne/epochs?label=' + encoded(label) + '&exclude_marked=' + excludeMarked),
   montage: (id: string) =>
     call<{ channels: { name: string; x: number; y: number; z: number }[]; montage: string; warning: string }>(
       '/sessions/' + encoded(id) + '/mne/montage'),
@@ -73,5 +73,46 @@ export const api = {
   hrv: (id: string, channel: string) =>
     call<{ channel: string; features: Record<string, number | null>; r_peaks: number[]; warning: string }>(
       '/sessions/' + encoded(id) + '/neurokit/hrv?channel=' + encoded(channel)),
+  qcWindows: (id: string, channel: string, windowSeconds: number) => call<import('./types').QCReport>(
+    '/sessions/' + encoded(id) + '/qc/windows?channel=' + encoded(channel) + '&window_seconds=' + windowSeconds),
+  qcMarkSegment: (id: string, start: number, end: number, reason: string) => call<RecordingInfo>(
+    '/sessions/' + encoded(id) + '/qc/segments', { method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({start,end,reason}) }),
+  qcRemoveSegment: (id: string, index: number) => call<RecordingInfo>(
+    '/sessions/' + encoded(id) + '/qc/segments/' + index, { method: 'DELETE' }),
+  qcMarkChannel: (id: string, name: string, marked: boolean) => call<RecordingInfo>(
+    '/sessions/' + encoded(id) + '/qc/channels', { method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name,marked}) }),
+  triggerCodebook: (id: string, definitions: import('./types').TriggerDefinition[]) =>
+    call<RecordingInfo>('/sessions/' + encoded(id) + '/triggers/codebook', {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body:JSON.stringify({definitions})
+    }),
+  triggerDetect: (id: string, channel: string, minWidthMs = 0, minIntervalMs = 0,
+                  tolerance = .25, commit = false, bitMask: number | null = null) =>
+    call<import('./types').TriggerPreview>('/sessions/' + encoded(id) + '/triggers/detect', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({channel,min_width_ms:minWidthMs,min_interval_ms:minIntervalMs,
+        tolerance,commit,bit_mask:bitMask})
+    }),
+  triggerEvents: (id: string, condition = '') =>
+    call<{events:import('./types').MappedTrigger[];count:number;conditions:string[]}>(
+      '/sessions/' + encoded(id) + '/triggers/events?condition=' + encoded(condition)),
+  triggerEpochs: (id: string, channel: string, condition: string, tmin: number,
+                  tmax: number, baselineEnd: number, excludeMarked: boolean) =>
+    call<import('./types').ConditionEpochs>('/sessions/' + encoded(id) + '/triggers/epochs?' +
+      new URLSearchParams({channel,condition,tmin:String(tmin),tmax:String(tmax),
+        baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked)}).toString()),
+  triggerEventURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/triggers/export/events',
+  triggerCodebookURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/triggers/export/codebook',
+  triggerNPZURL: (id: string, condition: string, tmin: number, tmax: number,
+                  baselineEnd: number, excludeMarked: boolean) => ROOT +
+    '/sessions/' + encoded(id) + '/triggers/export/multichannel?' +
+    new URLSearchParams({condition,tmin:String(tmin),tmax:String(tmax),baseline_end:String(baselineEnd),
+      exclude_marked:String(excludeMarked)}).toString(),
+  triggerEpochURL: (id: string, channel:string, condition:string, tmin:number, tmax:number,
+                    baselineEnd:number, excludeMarked:boolean) => ROOT + '/sessions/' + encoded(id) +
+    '/triggers/export/epochs?' + new URLSearchParams({channel,condition,tmin:String(tmin),
+      tmax:String(tmax),baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked)}).toString(),
   remove: (id: string) => call<{ deleted: boolean }>('/sessions/' + encoded(id), { method: 'DELETE' })
 }

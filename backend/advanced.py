@@ -113,22 +113,35 @@ def mne_power(recording, start=0, duration=30, fmin=1, fmax=45):
 
 
 def mne_epochs(recording, label, tmin=-.2, tmax=.8, baseline_end=0,
-               reject_peak_uv=None):
+               reject_peak_uv=None, exclude_marked=False):
     """MNE Epochs with explicit basic baseline and optional PTP reject criterion."""
     import mne
     raw = _mne_eeg(recording)
+    if exclude_marked:
+        marked = [name for name in raw.ch_names if name in recording.bad_channels]
+        if marked:
+            raw.info["bads"] = marked
     if not tmin < tmax or not tmin <= baseline_end <= tmax:
         raise ValueError("Invalid epoch or baseline window.")
     fs = recording.sfreq
     samples = []
+    manual_dropped = 0
     for ev in recording.events:
         if str(ev["label"]) != label:
             continue
         idx = int(round(float(ev["time"]) * fs))
         if idx >= 0 and idx < raw.n_times:
+            lo = (idx / fs) + tmin
+            hi = (idx / fs) + tmax + (1 / fs)
+            if exclude_marked and any(
+                float(interval["start"]) < hi and float(interval["end"]) > lo
+                for interval in recording.bad_segments
+            ):
+                manual_dropped += 1
+                continue
             samples.append([idx, 0, 1])
     if not samples:
-        raise ValueError("No matching events.")
+        raise ValueError("No usable matching events after manual exclusion.")
     epochs = mne.Epochs(raw, np.asarray(samples, dtype=int), event_id={"event": 1},
                         tmin=tmin, tmax=tmax,
                         baseline=(tmin, baseline_end) if baseline_end > tmin else None,
@@ -136,11 +149,13 @@ def mne_epochs(recording, label, tmin=-.2, tmax=.8, baseline_end=0,
                         preload=True, verbose="ERROR")
     if len(epochs) == 0:
         raise ValueError("All epochs were excluded.")
-    evoked = epochs.average()
+    evoked = epochs.average(picks="eeg")
     return {"time": evoked.times.tolist(), "channels": evoked.ch_names,
             "average": (evoked.data * 1e6).tolist(), "unit": "µV",
             "n": int(len(epochs)), "requested": len(samples),
-            "excluded": len(samples) - len(epochs),
+            "excluded": len(samples) - len(epochs) + manual_dropped,
+            "manual_rejected": manual_dropped,
+            "exclude_marked": bool(exclude_marked),
             "baseline": [tmin, baseline_end] if baseline_end > tmin else None,
             "method": "MNE Epochs and Evoked",
             "warning": "Check event latencies, filtering, bad channels and artifact thresholds before publication."}
@@ -209,3 +224,73 @@ def nk_hrv(recording, channel):
             "r_peaks": list(map(int, peaks.get("ECG_R_Peaks", []))),
             "method": "NeuroKit2 ECG cleaning, peak detection and HRV",
             "warning": "Validate R-peak detections, ectopic beats, signal duration and stationary assumptions."}
+
+
+def windowed_quality(recording, window_seconds=2.0, channel=None):
+    """Unit-independent descriptive window statistics for manual artifact review.
+
+    Relative flags are *screening suggestions* only; they never reject samples.
+    """
+    if not np.isfinite(window_seconds) or not 0.2 <= window_seconds <= 60:
+        raise ValueError("Window duration must be between 0.2 and 60 seconds.")
+    if channel is not None and channel not in recording.names:
+        raise ValueError("Unknown channel.")
+    length = max(2, int(round(window_seconds * recording.sfreq)))
+    count = recording.processed.shape[1]
+    if int(np.ceil(count / length)) > 2000:
+        raise ValueError("Too many windows: increase window_seconds to reduce QC workload.")
+    indices = [recording.names.index(channel)] if channel is not None else range(len(recording.names))
+    output = []
+    for i in indices:
+        values = recording.processed[i]
+        windows = []
+        for start in range(0, count, length):
+            end = min(count, start + length)
+            if end - start < 2:
+                continue
+            section = values[start:end]
+            diff = np.diff(section)
+            windows.append({
+                "start": round(start / recording.sfreq, 6),
+                "end": round(end / recording.sfreq, 6),
+                "rms": float(np.sqrt(np.mean(section ** 2))),
+                "std": float(np.std(section)),
+                "ptp": float(np.ptp(section)),
+                "max_step": float(np.max(np.abs(diff))),
+            })
+        if not windows:
+            continue
+        spans = np.asarray([w["ptp"] for w in windows])
+        median = float(np.median(spans))
+        mad = float(np.median(np.abs(spans - median)))
+        for w in windows:
+            # Median-relative thresholds deliberately avoid modality-specific units.
+            w["relative_high_amplitude"] = bool(
+                (mad > 0 and w["ptp"] > median + 8 * 1.4826 * mad)
+                or (mad == 0 and median > 0 and w["ptp"] > 3 * median)
+            )
+            w["relative_flat"] = bool(
+                median > 0 and w["ptp"] < median * .001
+            )
+            w["manually_excluded"] = any(
+                float(mark["start"]) < w["end"]
+                and float(mark["end"]) > w["start"]
+                for mark in recording.bad_segments
+            )
+        output.append({
+            "name": recording.names[i],
+            "type": recording.types[i],
+            "unit": recording.units[i],
+            "marked_bad": recording.names[i] in recording.bad_channels,
+            "median_ptp": median,
+            "windows": windows,
+        })
+    return {
+        "channel_results": output,
+        "window_seconds": float(window_seconds),
+        "rules": {
+            "relative_high_amplitude": "PTP > median(PTP) + 8 × 1.4826 × MAD(PTP)",
+            "relative_flat": "PTP < 0.001 × median(PTP)",
+        },
+        "warning": "Flags are descriptive prompts for human review, not validated rejection thresholds.",
+    }

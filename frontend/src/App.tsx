@@ -7,11 +7,15 @@ import {
   Layers3, Menu, Monitor, Plus, RefreshCw, RotateCcw, Save, Settings2,
   ShieldCheck, SlidersHorizontal, Sparkles, Trash2, Wifi, WifiOff, X
 } from 'lucide-react'
-import type { Evoked, LocalRecording, RecordingInfo, Spectrum, Step, TimeFrequency, Trace } from './types'
+import type { Evoked, LocalRecording, QCReport, RecordingInfo, Spectrum, Step, TimeFrequency, Trace } from './types'
+import { qualityWindows, validateMarkedSegment } from './qc'
+import { loadPreferences, savePreferences, resolveLanguage, localizeTree } from './localization'
+import type { Preferences } from './localization'
 import { demo, importCSV, applySteps, viewport, spectrum, spectrogram, erp, fourier } from './engine'
 import { api } from './api'
+import TriggerStudio from './TriggerStudio'
 
-type Section = 'overview' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'advanced' | 'learning' | 'export' | 'help'
+type Section = 'overview' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'advanced' | 'artifact' | 'triggers' | 'learning' | 'export' | 'help'
 const TABS: { id: Section; title: string; subtitle: string; icon: typeof Activity }[] = [
   { id: 'overview', title: 'Overview', subtitle: 'Tableau de bord', icon: Layers3 },
   { id: 'explorer', title: 'Signal Explorer', subtitle: 'Exploration temporelle', icon: Activity },
@@ -19,6 +23,8 @@ const TABS: { id: Section; title: string; subtitle: string; icon: typeof Activit
   { id: 'frequency', title: 'Frequency Lab', subtitle: 'Spectres & temps-fréquence', icon: ChartNoAxesCombined },
   { id: 'physiology', title: 'Neurophysiology', subtitle: 'ERP & biosignaux', icon: HeartPulse },
   { id: 'advanced', title: 'Advanced Analysis', subtitle: 'MNE · ICA · QC · HRV', icon: BrainCircuit },
+  { id: 'artifact', title: 'Artifact Review', subtitle: 'Contrôle qualité et exclusions', icon: ShieldCheck },
+  { id: 'triggers', title: 'Trigger & Epoch Studio', subtitle: 'Événements et conditions', icon: Activity },
   { id: 'learning', title: 'Learning Studio', subtitle: 'Simulation pédagogique', icon: FlaskConical },
   { id: 'export', title: 'Export & Reproducibility', subtitle: 'Exports & provenance', icon: FileDown },
   { id: 'help', title: 'Documentation', subtitle: 'Méthodes & limites', icon: CircleHelp }
@@ -121,6 +127,25 @@ export default function App() {
   const [altChannel, setAltChannel] = useState('EEG Cz')
   const [editType, setEditType] = useState('eeg')
   const [editUnit, setEditUnit] = useState('µV')
+  const [preferences, setPreferences] = useState<Preferences>(loadPreferences)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [browserLanguage, setBrowserLanguage] = useState(() => typeof navigator !== 'undefined' ? navigator.language : 'en')
+  const locale = resolveLanguage(preferences.language, browserLanguage)
+  const [qcReport, setQcReport] = useState<QCReport | null>(null)
+  const [qcWindowSeconds, setQcWindowSeconds] = useState(2)
+  const [qcStart, setQcStart] = useState(4)
+  const [qcEnd, setQcEnd] = useState(5)
+  const [qcReason, setQcReason] = useState('Artéfact identifié visuellement')
+  const [excludeMarked, setExcludeMarked] = useState(false)
+  useEffect(() => {
+    savePreferences(preferences)
+    document.documentElement.lang = locale
+  }, [preferences, locale])
+  useEffect(() => {
+    const handleLanguageChange = () => setBrowserLanguage(navigator.language)
+    window.addEventListener('languagechange', handleLanguageChange)
+    return () => window.removeEventListener('languagechange', handleLanguageChange)
+  }, [])
   const fileInput = useRef<HTMLInputElement>(null)
   const sessionInput = useRef<HTMLInputElement>(null)
   const { notice, setNotice, error, success } = useNotice()
@@ -130,6 +155,8 @@ export default function App() {
   const steps = info?.history || []
   const events = useMemo(() => info?.events || [], [info])
   const selectedLabel = info?.name || 'Aucun enregistrement'
+  const badChannels = info?.bad_channels || []
+  const badSegments = info?.bad_segments || []
 
   const ping = useCallback(async () => {
     setChecking(true)
@@ -146,7 +173,7 @@ export default function App() {
     setChannel(newInfo.channels[0]?.name || '')
     setStart(0); setDuration(Math.min(10, newInfo.duration || 10))
     setEventLabel(newInfo.events[0]?.label || 'stimulus')
-    setTraces([]); setRawTraces([]); setPsd(null); setFftData(null); setTfr(null); setEvoked(null); setPhysio(null); setAdvancedOutput(null)
+    setQcReport(null); setExcludeMarked(false); setTraces([]); setRawTraces([]); setPsd(null); setFftData(null); setTfr(null); setEvoked(null); setPhysio(null); setAdvancedOutput(null)
   }
   const loadDemo = () => { const rec = demo(demoRate, 40, alpha, noise, demoTone); activate(rec.info, null, rec); success('Démonstration synthétique chargée.') }
   const loadPythonDemo = async () => {
@@ -221,7 +248,7 @@ export default function App() {
 
   const loadERP = async () => {
     try {
-      const result = remote ? await api.erp(remote, channel, eventLabel, -.2, .8) : erp(record, channel, eventLabel, -.2, .8)
+      const result = remote ? await api.erp(remote, channel, eventLabel, -.2, .8, excludeMarked) : erp(record, channel, eventLabel, -.2, .8, excludeMarked)
       setEvoked(result); success('Moyenne événementielle calculée.')
     } catch (e) { error(e); setEvoked(null) }
   }
@@ -253,7 +280,7 @@ export default function App() {
       } else if (!remote) throw Error('Cette analyse avancée nécessite le moteur Python local.')
       else if (advancedMode === 'coherence') setAdvancedOutput(await api.coherence(remote, channel, altChannel, start, win))
       else if (advancedMode === 'mne-psd') setAdvancedOutput(await api.mnePSD(remote, start, win))
-      else if (advancedMode === 'mne-epochs') setAdvancedOutput(await api.mneEpochs(remote, eventLabel))
+      else if (advancedMode === 'mne-epochs') setAdvancedOutput(await api.mneEpochs(remote, eventLabel, excludeMarked))
       else if (advancedMode === 'montage') setAdvancedOutput(await api.montage(remote))
       else if (advancedMode === 'ica') setAdvancedOutput(await api.ica(remote, 10))
       else if (advancedMode === 'hrv') setAdvancedOutput(await api.hrv(remote, channel))
@@ -272,6 +299,51 @@ export default function App() {
     } catch (e) { error(e) }
   }
 
+  const scanQC = async () => {
+    setBusy(true)
+    try {
+      const report = remote ? await api.qcWindows(remote, channel, qcWindowSeconds) :
+        qualityWindows(record, qcWindowSeconds, channel)
+      setQcReport(report)
+      success('Contrôle descriptif calculé. Aucun échantillon n’a été supprimé.')
+    } catch (e) { error(e) } finally { setBusy(false) }
+  }
+  const saveBadSegment = async () => {
+    try {
+      const mark = validateMarkedSegment(qcStart, qcEnd, info?.duration || 0, qcReason)
+      if (badSegments.length >= 500) throw Error('Limite de 500 segments marqués atteinte.')
+      if (remote) setRemoteInfo(await api.qcMarkSegment(remote, mark.start, mark.end, mark.reason))
+      else setRecord(old => ({ ...old, info: { ...old.info, bad_segments:
+        [...(old.info.bad_segments || []), mark].sort((a,b) => a.start-b.start) } }))
+      setQcReport(null)
+      success('Segment marqué. Les signaux d’origine ne sont pas modifiés.')
+    } catch (e) { error(e) }
+  }
+  const removeBadSegment = async (index: number) => {
+    try {
+      if (remote) setRemoteInfo(await api.qcRemoveSegment(remote, index))
+      else setRecord(old => ({ ...old, info: { ...old.info, bad_segments:
+        (old.info.bad_segments || []).filter((_,i) => i !== index) } }))
+      setQcReport(null)
+      success('Marquage supprimé.')
+    } catch (e) { error(e) }
+  }
+  const toggleBadChannel = async (name: string) => {
+    try {
+      const marked = !badChannels.includes(name)
+      if (remote) setRemoteInfo(await api.qcMarkChannel(remote, name, marked))
+      else setRecord(old => ({ ...old, info: { ...old.info, bad_channels:
+        marked ? [...(old.info.bad_channels || []), name] :
+          (old.info.bad_channels || []).filter(x => x !== name) } }))
+      setQcReport(null)
+      success(marked ? 'Canal signalé pour exclusion manuelle.' : 'Canal réhabilité.')
+    } catch (e) { error(e) }
+  }
+  const exportQC = () => saveBlob(JSON.stringify({
+    application:'NeuroCanvas', version:'0.2.0', recording: selectedLabel, sfreq,
+    exported_at:new Date().toISOString(), bad_channels:badChannels, bad_segments:badSegments,
+    screening:qcReport, warning:'Marquages manuels, sans suppression des données brutes.'
+  },null,2),'application/json','neurocanvas_artifact_review.json')
   const addStep = async () => {
     if (!selection.length) { error('Sélectionner au moins un canal avant d’appliquer un traitement.'); return }
     const newStep: Step = { method: stepType, channels: [...selection] }
@@ -311,7 +383,7 @@ export default function App() {
       success('Événement enregistré.')
     } catch (e) { error(e) }
   }
-  const exportMeta = () => saveBlob(JSON.stringify({ application: 'NeuroCanvas', version: '0.1.0', created_at: new Date().toISOString(),
+  const exportMeta = () => saveBlob(JSON.stringify({ application: 'NeuroCanvas', version: '0.3.0', created_at: new Date().toISOString(),
     info, method: remote ? 'Python/SciPy/MNE/NeuroKit2' : 'JavaScript / educational preview',
     signal_units: info?.channels.map(c => ({ name: c.name, unit: c.unit, type: c.type })) }, null, 2), 'application/json', 'neurocanvas_provenance.json')
   const exportCSV = (raw = false) => {
@@ -328,8 +400,14 @@ export default function App() {
     if (remote) { error('Les sessions Python en mémoire ne sont pas sérialisées. Exporter les données CSV et la provenance JSON.'); return }
     saveBlob(JSON.stringify(record), 'application/json', 'neurocanvas_session.json')
   }
-  const graphShapes = useMemo(() => events.filter(ev => ev.time >= start && ev.time <= start + duration).slice(0, 120)
-    .map(ev => ({ type: 'line', x0: ev.time, x1: ev.time, y0: 0, y1: 1, yref: 'paper', line: { color: '#d4a46b', width: 1, dash: 'dot' } })), [events, start, duration])
+  const graphShapes = useMemo(() => [
+    ...badSegments.filter(seg => seg.start < start + duration && seg.end > start).slice(0,100)
+      .map(seg => ({ type:'rect', x0:seg.start, x1:seg.end, y0:0, y1:1, yref:'paper',
+        line: {width:0}, fillcolor:'rgba(199,71,72,.10)', layer:'below' })),
+    ...events.filter(ev => ev.time >= start && ev.time <= start + duration).slice(0, 120)
+      .map(ev => ({ type:'line', x0:ev.time, x1:ev.time, y0:0, y1:1, yref:'paper',
+        line: { color:'#d4a46b', width:1, dash:'dot' } }))
+  ], [events, badSegments, start, duration])
   const signalTraces = useMemo(() => {
     const result: unknown[] = []
     const total = Math.max(1, traces.length)
@@ -360,7 +438,7 @@ export default function App() {
     return defs.map(b => ({ ...b, power: psd.frequency.reduce((sum, f, i) => sum + (f >= b.a && f < b.b ? psd.psd[i] * df : 0), 0) }))
   }, [psd])
 
-  return <div className="shell">
+  return localizeTree(<div className={'shell density-' + preferences.density}>
     <aside className={'sidebar ' + (menu ? 'visible' : '')}>
       <div className="brand"><div className="brand-mark"><Activity size={24} strokeWidth={2.2} /></div>
         <div><strong>NeuroCanvas</strong><span>SCIENTIFIC SIGNAL STUDIO</span></div>
@@ -384,16 +462,59 @@ export default function App() {
     </aside>
 
     {menu && <div className="overlay" onClick={() => setMenu(false)} />}
+    {settingsOpen && <div className="preferences-backdrop" role="presentation" onClick={() => setSettingsOpen(false)}>
+      <section className="preferences-panel" role="dialog" aria-modal="true" aria-label="Personnalisation"
+        onClick={event => event.stopPropagation()}>
+        <div className="preferences-top"><div><small>NEUROCANVAS / SETTINGS</small>
+          <h2>Personnalisation</h2></div>
+          <button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="Fermer"><X size={20}/></button>
+        </div>
+        <div className="preferences-content">
+          <div className="preferences-group"><h3>Langue de l’interface</h3>
+            <p>Langue détectée : {browserLanguage}. {locale.toUpperCase()}</p>
+            <div className="preference-options">
+              {([
+                { id:'auto', title:'Automatique (navigateur)', desc:'Automatic language detection' },
+                { id:'fr', title:'Français', desc:'Interface en français' },
+                { id:'en', title:'Anglais', desc:'English interface' }
+              ] as const).map(item => <label key={item.id} className={'preference-choice ' +
+                (preferences.language === item.id ? 'selected' : '')}>
+                <input type="radio" name="language" value={item.id}
+                  checked={preferences.language === item.id}
+                  onChange={() => setPreferences(prev => ({...prev,language:item.id}))}/>
+                <span><strong>{item.title}</strong><small>{item.desc}</small></span>
+              </label>)}
+            </div>
+          </div>
+          <div className="preferences-group"><h3>Densité de l’interface</h3>
+            <div className="preference-options horizontal">
+              {(['standard','compact'] as const).map(value=><label key={value}
+                className={'preference-choice ' + (preferences.density === value ? 'selected' : '')}>
+                <input type="radio" name="density" value={value}
+                  checked={preferences.density === value}
+                  onChange={() => setPreferences(prev => ({...prev,density:value}))}/>
+                <span><strong>{value === 'standard' ? 'Standard' : 'Compact'}</strong></span>
+              </label>)}
+            </div>
+          </div>
+          <p className="preferences-note">Préférences enregistrées sur cet appareil.</p>
+          <p className="preferences-note">La langue des enregistrements et des signaux ne sera pas modifiée.</p>
+        </div>
+        <button className="primary preferences-apply" onClick={() => setSettingsOpen(false)}>Appliquer</button>
+      </section>
+    </div>}
     <main className="main">
       <header className="topbar">
         <div className="top-left"><button className="mobile-menu icon-button" onClick={() => setMenu(true)} aria-label="Menu"><Menu size={22} /></button>
           <span className="breadcrumbs">Workspace <span>/</span> {TABS.find(x => x.id === tab)?.title}</span></div>
         <div className="top-right"><span className={'status-pill ' + (connected ? 'ready' : '')}>{connected ? 'PYTHON CONNECTED' : 'LOCAL BROWSER'}</span>
+          <button className="outline small personalization-button" title="Ouvrir les préférences" aria-label="Personnalisation"
+            onClick={() => setSettingsOpen(true)}><Settings2 size={16}/><span>Personnalisation</span><span className="language-mini">{locale.toUpperCase()}</span></button>
           <button className="primary small" onClick={() => fileInput.current?.click()}><FileUp size={15} /> Importer</button>
         </div>
       </header>
       <div className="workspace">
-        <div className="page-heading"><div className="eyebrow">NEUROSCIENCE WORKBENCH / V0.1</div>
+        <div className="page-heading"><div className="eyebrow">NEUROSCIENCE WORKBENCH / V0.3</div>
           <h1>{tab === 'overview' ? 'Your signal workspace' : TABS.find(x => x.id === tab)?.title}</h1>
           <p>{tab === 'overview' ? 'Explorer, comprendre et transformer des signaux biomédicaux dans un même environnement.'
             : TABS.find(x => x.id === tab)?.subtitle}</p>
@@ -434,7 +555,7 @@ export default function App() {
               </div></Panel></div>
         </>}
 
-        {['explorer', 'processing', 'frequency', 'physiology', 'advanced'].includes(tab) && <div className="data-bar">
+        {['explorer', 'processing', 'frequency', 'physiology', 'advanced', 'artifact', 'triggers'].includes(tab) && <div className="data-bar">
           <div><span className="tiny-label">ENREGISTREMENT ACTIF</span><strong>{selectedLabel}</strong>
             <small>{format(info?.duration || 0, 2)} s · {channels.length} canaux · {format(sfreq, 2)} Hz</small></div>
           <button className="outline small" onClick={() => fileInput.current?.click()}><FileUp size={15}/> Changer de fichier</button>
@@ -551,7 +672,9 @@ export default function App() {
               {channels.map(ch => <option key={ch.name}>{ch.name}</option>)}</select></label>
               <label>Événement<select value={eventLabel} onChange={e=>setEventLabel(e.target.value)}>
                 {[...new Set(events.map(x=>x.label))].map(x=><option key={x}>{x}</option>)}
-              </select></label><button className="primary" onClick={() => void loadERP()}><Activity size={16}/> Calculer ERP</button></div>
+              </select></label><label className="toggle"><input type="checkbox" checked={excludeMarked}
+                onChange={e => setExcludeMarked(e.target.checked)}/> Exclure les artéfacts marqués</label>
+              <button className="primary" onClick={() => void loadERP()}><Activity size={16}/> Calculer ERP</button></div>
             {evoked ? <><div className="result-info">{evoked.n} époques incluses · {evoked.excluded} exclues (bornes)</div>
               <Plot title="Event-locked average" xTitle="Temps relatif (s)" yTitle={'Amplitude (' + evoked.unit + ')'} traces={[
                 { type:'scatter', mode:'lines', name:'Moyenne', x:evoked.time, y:evoked.mean, line:{ color:COLORS[0], width:2 }},
@@ -560,7 +683,7 @@ export default function App() {
                     fillcolor:'rgba(24,125,104,.14)', line:{ width:0 }}] : [])
               ]} /></> : <div className="empty-state"><Activity size={28}/><h3>Calculer une réponse moyenne</h3>
                 <p>Les événements doivent être disponibles. Fenêtre fixe : −200 à +800 ms, avec correction de baseline pré-stimulus.</p></div>}
-            <p className="note">La moyenne ne comporte pas encore de rejet automatique des artéfacts. Elle ne remplace pas une chaîne EEG validée.</p>
+            <p className="note">Le rejet manuel n’est appliqué que lorsque l’option est cochée. Aucune détection automatique ne supprime les essais. Ce calcul reste exploratoire.</p>
           </Panel><Panel title="NeuroKit2 processor" description="Traitements physiologiques spécialisés" className="right-panel">
             <div className="form-stack"><label>Modalité<select value={physiologyType} onChange={e=>setPhysiologyType(e.target.value)}>
               <option value="ecg">ECG · Détection QRS / HR</option><option value="eda">EDA · Tonic / Phasic</option>
@@ -597,6 +720,9 @@ export default function App() {
               {channels.map(c=><option key={c.name}>{c.name}</option>)}</select></label>}
             {advancedMode === 'mne-epochs' && <label>Événement<select value={eventLabel} onChange={e=>setEventLabel(e.target.value)}>
               {[...new Set(events.map(e=>e.label))].map(x=><option key={x}>{x}</option>)}</select></label>}
+            {advancedMode === 'mne-epochs' && <label className="toggle"><input type="checkbox"
+              checked={excludeMarked} onChange={e=>setExcludeMarked(e.target.checked)}/>
+              Exclure segments et voies marqués</label>}
             <button className="primary" disabled={busy || (!connected && advancedMode !== 'quality')}
               onClick={() => void runAdvanced()}><BrainCircuit size={16}/> Lancer l’analyse</button>
           </div>
@@ -617,6 +743,74 @@ export default function App() {
           <p className="note"><strong>Attention :</strong> changer une unité dans ces métadonnées ne multiplie pas les valeurs par un facteur de conversion. Les données CSV doivent déjà être exprimées dans l’unité choisie. Les fonctions MNE acceptent les voies EEG annotées en V, mV ou µV.</p>
         </Panel>
         </>}
+
+        {tab === 'artifact' && <>
+          <div className="columns-main">
+            <Panel title="Analyse par fenêtre" description="Indicateurs descriptifs, sans rejet automatique">
+              <div className="toolbar"><label>Canal<select value={channel} onChange={e=>{setChannel(e.target.value);setQcReport(null)}}>
+                {channels.map(c=><option key={c.name}>{c.name}</option>)}</select></label>
+                <label>Fenêtre QC (s)<input type="number" min=".2" max="60" step=".5" value={qcWindowSeconds}
+                  onChange={e=>setQcWindowSeconds(Number(e.target.value))}/></label>
+                <button className="primary" disabled={busy} onClick={() => void scanQC()}><Activity size={16}/> Examiner le canal</button>
+              </div>
+              {qcReport?.channel_results[0] ? <>
+                <div className="qc-stats">
+                  <div><strong>{qcReport.channel_results[0].windows.length}</strong><small>Fenêtres analysées</small></div>
+                  <div><strong>{qcReport.channel_results[0].windows.filter(w=>w.relative_high_amplitude || w.relative_flat).length}</strong>
+                    <small>Périodes suspectes</small></div>
+                  <div><strong>{badSegments.length}</strong><small>Segments annotés</small></div>
+                </div>
+                <Plot title="Amplitude crête-à-crête" xTitle="Temps (s)" yTitle={'P–P (' + qcReport.channel_results[0].unit + ')'}
+                  height={295} traces={[{ type:'bar', x:qcReport.channel_results[0].windows.map(w=>(w.start+w.end)/2),
+                    y:qcReport.channel_results[0].windows.map(w=>w.ptp), name:channel,
+                    marker:{color:qcReport.channel_results[0].windows.map(w=>
+                      w.manually_excluded ? '#bc5c5c' :
+                        (w.relative_high_amplitude||w.relative_flat ? '#d5a05c' : '#39876e'))} }]}/>
+                <div className="qc-table"><table><thead><tr><th>Début</th><th>Fin</th><th>Amplitude P–P</th><th>Statut</th></tr></thead>
+                  <tbody>{qcReport.channel_results[0].windows.map((w,i)=><tr key={i}
+                    className={w.relative_high_amplitude || w.relative_flat ? 'qc-flagged' : ''}
+                    onClick={()=>{setQcStart(w.start);setQcEnd(Math.min(w.end,info?.duration||w.end));setStart(w.start);setDuration(Math.max(.1,w.end-w.start))}}>
+                    <td>{format(w.start,3)} s</td><td>{format(w.end,3)} s</td>
+                    <td>{format(w.ptp,5)}</td><td>{w.manually_excluded ? 'Marqué manuellement' :
+                      (w.relative_high_amplitude || w.relative_flat ? 'Suspect' : 'Normal')}</td>
+                  </tr>)}</tbody></table></div>
+                <p className="note">Indicateurs exploratoires uniquement : aucune exclusion automatique.</p>
+              </> : <div className="empty-state"><ShieldCheck size={30}/><h3>Qualité des signaux</h3>
+                <p>Choisir un canal et analyser les fluctuations pour guider l’inspection humaine.</p></div>}
+            </Panel>
+            <Panel title="Contrôle des artéfacts" description="Marquages manuels réversibles" className="right-panel">
+              <div className="form-stack">
+                <label>Canal à exclure<select value={channel} onChange={e=>setChannel(e.target.value)}>
+                  {channels.map(c=><option key={c.name}>{c.name}</option>)}</select></label>
+                <button className="outline" onClick={() => void toggleBadChannel(channel)}>
+                  <ShieldCheck size={15}/>{badChannels.includes(channel) ? 'Réhabiliter ce canal' : 'Marquer ce canal'}</button>
+                <label>Début du segment (s)<input type="number" min="0" step=".01" value={qcStart}
+                  onChange={e=>setQcStart(Number(e.target.value))}/></label>
+                <label>Fin du segment (s)<input type="number" min="0" step=".01" value={qcEnd}
+                  onChange={e=>setQcEnd(Number(e.target.value))}/></label>
+                <label>Justification<input value={qcReason} maxLength={180} onChange={e=>setQcReason(e.target.value)}/></label>
+                <button className="primary" onClick={() => void saveBadSegment()}><Plus size={16}/> Marquer le segment</button>
+                <button className="outline" onClick={exportQC}><Download size={15}/> Exporter contrôle qualité</button>
+              </div>
+              <p className="note">Aucun signal brut n'est écrasé. Les exclusions ne sont utilisées dans les ERP que sur demande.</p>
+            </Panel>
+          </div>
+          <Panel title="Segments annotés" description="Historique manuel et réversible">
+            {badSegments.length ? badSegments.map((seg,i)=><div className="step" key={i}>
+              <span className="step-index">{i+1}</span><div><strong>{format(seg.start,3)} – {format(seg.end,3)} s</strong>
+                <small>{seg.reason}</small></div><button className="icon-button" onClick={() => void removeBadSegment(i)}
+                  aria-label={'Supprimer segment ' + (i+1)}><Trash2 size={16}/></button>
+            </div>) : <p className="note">Aucun segment marqué.</p>}
+            <div className="event-chips">{badChannels.map(name=><span key={name}>{name} · Canal à exclure</span>)}
+              {!badChannels.length && <span>Aucun canal marqué.</span>}</div>
+          </Panel>
+        </>}
+
+        {tab === 'triggers' && info && <TriggerStudio
+          key={remote || info.name + '-' + info.samples}
+          info={info} record={record} remote={remote} locale={locale}
+          setRecord={setRecord} setRemoteInfo={setRemoteInfo}
+          success={success} error={error}/>}
 
         {tab === 'learning' && <>
           <Panel title="Signal synthesis laboratory" description="Manipuler des paramètres et voir leurs conséquences sur l'activité synthétique">
@@ -659,6 +853,13 @@ export default function App() {
             <Panel title="Portable session" description="Session autonome du navigateur">
               <div className="export-icon"><Save size={28}/></div><p>Sauvegarder tous les signaux bruts, événements et traitements dans un JSON réimportable.</p>
               <button className="outline" disabled={!!remote} onClick={exportSession}><Save size={16}/> Sauvegarder session</button></Panel></div>
+          <Panel title="Contrôle des artéfacts" description="Décisions de revue manuelle">
+            <div className="summary-list">
+              <div><span>Canaux à exclure</span><strong>{badChannels.length}</strong></div>
+              <div><span>Segments annotés</span><strong>{badSegments.length}</strong></div>
+            </div>
+            <button className="outline" onClick={exportQC}><Download size={15}/> Exporter contrôle qualité</button>
+          </Panel>
           <Panel title="Recording audit trail" description="Opérations appliquées à la session">
             <div className="summary-list"><div><span>Origine</span><strong>{info?.source}</strong></div>
               <div><span>Nom</span><strong>{selectedLabel}</strong></div>
@@ -697,7 +898,7 @@ export default function App() {
       <label className="fs-control">Fs pour CSV sans temps (Hz)<input type="number" min=".01" placeholder="Automatique" value={fsInput} onChange={e=>setFsInput(e.target.value)}/></label>
       <button title="Importer une session JSON" className="outline" onClick={()=>sessionInput.current?.click()}><Save size={15}/> Session</button>
     </div>
-  </div>
+  </div>, locale)
 }
 function Metric({ title, value, sub, icon }: { title: string; value: string; sub: string; icon: ReactNode }) {
   return <div className="metric"><div className="metric-head"><span>{title}</span><span className="metric-icon">{icon}</span></div>

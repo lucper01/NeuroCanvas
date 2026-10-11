@@ -13,7 +13,7 @@ def test_session_lifecycle_and_export():
     key = meta["session_id"]
     assert meta["samples"] == 10000
     assert meta["sfreq"] == 250
-    assert len(meta["channels"]) == 5
+    assert len(meta["channels"]) == 6
     path = f"/api/sessions/{key}"
     view = client.post(f"{path}/viewport", json={"channels": ["EEG Fz"], "duration": 10})
     assert view.status_code == 200, view.text

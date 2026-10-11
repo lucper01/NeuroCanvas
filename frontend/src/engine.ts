@@ -17,15 +17,26 @@ export function demo(fs = 250, seconds = 40, alpha = 10, noise = 1, secondTone =
     matrix[4].push(Math.sin(2 * Math.PI * .23 * t) + .025 * gaussian())
     matrix[5].push((t > 12 && t < 15 ? .2 : .04) * gaussian())
   }
-  const names = ['EEG Fz', 'EEG Cz', 'ECG', 'EDA', 'RSP', 'EMG']
-  const types = ['eeg', 'eeg', 'ecg', 'eda', 'rsp', 'emg']
-  const units = ['µV', 'µV', 'a.u.', 'a.u.', 'a.u.', 'a.u.']
+  const codes = [11,12,21,22,11,12,21]
+  const onsets = [5,10,15,20,25,30,35]
+  const ttl = new Array(n).fill(0)
+  onsets.forEach((at,i)=>ttl.fill(codes[i],Math.round(at*fs),Math.min(n,Math.round(at*fs)+Math.max(1,Math.round(.012*fs)))))
+  matrix.push(ttl)
+  const names = ['EEG Fz', 'EEG Cz', 'ECG', 'EDA', 'RSP', 'EMG', 'TRIGGER TTL']
+  const types = ['eeg', 'eeg', 'ecg', 'eda', 'rsp', 'emg', 'stim']
+  const units = ['µV', 'µV', 'a.u.', 'a.u.', 'a.u.', 'a.u.', 'code']
   const info: RecordingInfo = {
     name: 'Démonstration physiologique synthétique', sfreq: fs,
     samples: n, duration: (n - 1) / fs,
     channels: names.map((name, i) => ({ name, type: types[i], unit: units[i] })),
     events: [5, 10, 15, 20, 25, 30, 35].map(time => ({ time, label: 'stimulus', duration: 0 })),
     history: [], source: 'synthetic/browser',
+    trigger_definitions: [
+      {code:11,meaning:'Visual standard',conditions:['Visual']},
+      {code:12,meaning:'Visual deviant',conditions:['Visual']},
+      {code:21,meaning:'Auditory standard',conditions:['Auditory']},
+      {code:22,meaning:'Auditory deviant',conditions:['Auditory']}
+    ],
     warnings: ['Données entièrement simulées, sans mesure physiologique humaine.']
   }
   return { info, raw: matrix, processed: matrix.map(y => [...y]) }
@@ -249,9 +260,10 @@ export function spectrogram(rec: LocalRecording, name: string, start = 0, durati
     power: frequency.map((_, i) => columns.map(column => 10 * Math.log10(Math.max(1e-24, column[i])))),
     unit: 'dB re 1 ' + rec.info.channels[idx].unit + '²/Hz' }
 }
-export function erp(rec: LocalRecording, channel: string, label: string, tmin = -.2, tmax = .8): Evoked {
+export function erp(rec: LocalRecording, channel: string, label: string, tmin = -.2, tmax = .8, excludeMarked = false): Evoked {
   const idx = rec.info.channels.findIndex(c => c.name === channel)
   if (idx < 0 || tmin >= tmax) throw Error('Canal ou fenêtre invalide.')
+  if (excludeMarked && (rec.info.bad_channels || []).includes(channel)) throw Error('Canal marqué comme mauvais.')
   const fs = rec.info.sfreq
   const a = Math.round(tmin * fs), b = Math.round(tmax * fs)
   const trials: number[][] = []
@@ -259,6 +271,8 @@ export function erp(rec: LocalRecording, channel: string, label: string, tmin = 
   for (const event of rec.info.events.filter(x => !label || x.label === label)) {
     const sample = Math.round(event.time * fs), lo = sample + a, hi = sample + b + 1
     if (lo < 0 || hi > rec.info.samples) { excluded++; continue }
+    if (excludeMarked && (rec.info.bad_segments || []).some(mark =>
+      mark.start < hi / fs && mark.end > lo / fs)) { excluded++; continue }
     const data = rec.processed[idx].slice(lo, hi)
     const baselineSamples = Math.max(0, Math.min(data.length, -a + 1))
     const baseline = baselineSamples ? data.slice(0, baselineSamples).reduce((x, y) => x + y, 0) / baselineSamples : 0
