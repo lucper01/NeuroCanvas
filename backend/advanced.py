@@ -167,8 +167,8 @@ def ica_preview(recording, n_components=10, max_seconds=120):
     import mne
     from mne.preprocessing import ICA
     raw = _mne_eeg(recording)
-    if raw.info["nchan"] > 64:
-        raise ValueError("ICA preview currently supports at most 64 EEG channels.")
+    if raw.info["nchan"] > 128:
+        raise ValueError("ICA preview currently supports at most 128 EEG channels.")
     if raw.n_times < int(raw.info["sfreq"] * 10):
         raise ValueError("ICA preview requires at least 10 seconds.")
     if raw.info["sfreq"] * max_seconds < raw.n_times:
