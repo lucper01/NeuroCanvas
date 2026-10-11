@@ -1,7 +1,7 @@
 import type { LocalRecording, RecordingInfo, Step, Trace, Spectrum, TimeFrequency, Evoked } from './types'
 
 /** Deterministic synthetic signals, clearly separated from measured biosignals. */
-export function demo(fs = 250, seconds = 40, alpha = 10, noise = 1): LocalRecording {
+export function demo(fs = 250, seconds = 40, alpha = 10, noise = 1, secondTone = 20): LocalRecording {
   const n = fs * seconds
   const matrix: number[][] = Array.from({ length: 6 }, () => [])
   let seed = 43
@@ -9,7 +9,7 @@ export function demo(fs = 250, seconds = 40, alpha = 10, noise = 1): LocalRecord
   const gaussian = () => Math.sqrt(-2 * Math.log(Math.max(rand(), 1e-12))) * Math.cos(2 * Math.PI * rand())
   for (let i = 0; i < n; i++) {
     const t = i / fs
-    matrix[0].push(12 * Math.sin(2 * Math.PI * alpha * t) + 4 * Math.sin(2 * Math.PI * 20 * t) + 2.5 * noise * gaussian())
+    matrix[0].push(12 * Math.sin(2 * Math.PI * alpha * t) + 4 * Math.sin(2 * Math.PI * secondTone * t) + 2.5 * noise * gaussian())
     matrix[1].push(9 * Math.sin(2 * Math.PI * (alpha - 2) * t + .7) + 3 * noise * gaussian())
     const phase = ((t - .6) % (60 / 72) + 60 / 72) % (60 / 72)
     matrix[2].push(.07 * Math.sin(2 * Math.PI * 1.2 * t) + Math.exp(-.5 * (Math.min(phase, 60 / 72 - phase) / .025) ** 2))
