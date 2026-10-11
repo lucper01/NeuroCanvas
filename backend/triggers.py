@@ -199,3 +199,37 @@ def condition_epochs(rec, channel, condition, tmin=-.2, tmax=.8, baseline_end=0.
         "baseline": [tmin, baseline_end] if baseline_end > tmin else None,
         "exclude_marked": bool(exclude_marked),
     }
+
+
+
+def epoch_rows(rec, channel, condition, tmin, tmax, baseline_end, exclude_marked):
+    """Yield one row per full-resolution epoch sample for scientific CSV export."""
+    if channel not in rec.names:
+        raise ValueError("Unknown channel.")
+    lo = int(round(tmin * rec.sfreq))
+    hi = int(round(tmax * rec.sfreq)) + 1
+    times = np.arange(lo, hi, dtype=float) / rec.sfreq
+    mask = (times >= tmin) & (times <= baseline_end)
+    accepted = 0
+    signal_row = rec.processed[rec.names.index(channel)]
+    for ev in rec.events:
+        mapped = map_trigger(ev, rec.trigger_definitions)
+        if condition and condition not in mapped["conditions"]:
+            continue
+        onset = int(round(ev["time"] * rec.sfreq))
+        a, b = onset + lo, onset + hi
+        if a < 0 or b > len(signal_row):
+            continue
+        if exclude_marked and (channel in rec.bad_channels or any(
+            seg["start"] < b / rec.sfreq and seg["end"] > a / rec.sfreq
+            for seg in rec.bad_segments
+        )):
+            continue
+        epoch = signal_row[a:b].copy()
+        if baseline_end > tmin and np.any(mask):
+            epoch -= epoch[mask].mean()
+        accepted += 1
+        for offset, value in zip(times, epoch):
+            yield [accepted, "|".join(mapped["conditions"]), mapped["code"] or "",
+                   mapped["meaning"], ev["time"], round(float(offset), 9),
+                   float(value), rec.units[rec.names.index(channel)]]
