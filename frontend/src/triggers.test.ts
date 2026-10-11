@@ -51,6 +51,15 @@ describe('Trigger & Epoch Studio (offline scientific engine)', () => {
     expect(curated.excluded_manual).toBe(1)
     expect(data.raw[0][10]).toBe(rec.raw[0][10])
   })
+  it('decodes trigger bytes from a composite status channel', () => {
+    const rec=demo()
+    rec.raw[6][1250]=65536+11
+    rec.raw[6][1251]=65536+11
+    rec.raw[6][1252]=65536+11
+    const detected=detectTriggers(rec,'TRIGGER TTL',0,0,.25,65535)
+    expect(detected.counts['11']).toBe(2)
+    expect(detected.events[0].code).toBe(11)
+  })
   it('rejects invalid codes, duplicate definitions and unknown channels', () => {
     expect(()=>validateDefinitions([{code:11,meaning:'first',conditions:[]},
       {code:11,meaning:'duplicate',conditions:[]}])).toThrow()
