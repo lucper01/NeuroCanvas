@@ -183,7 +183,7 @@ export function epochCSV(result: ConditionEpochs): string {
     throw Error('Export complet indisponible depuis cet aperçu. Utiliser le moteur Python.')
   if(result.n*result.time.length>1000000)throw Error('Exporter les époques avec le moteur Python.')
   const rows=['trial_index,condition,code,meaning,onset_s,relative_time_s,amplitude,unit,event_uid,review_rejected,review_reason']
-  const quote=(v:string|number)=>'"'+String(v).replace(/"/g,'""')+'"'
+  const quote=(v:string|number|boolean)=>'"'+String(v).replace(/"/g,'""')+'"'
   result.trials.forEach((trial,i)=>trial.signal.forEach((amplitude,j)=>{
     rows.push([i+1,trial.conditions.join('|'),trial.code||'',trial.meaning,trial.time,
       result.trial_time[j],amplitude,result.unit,trial.event_uid||'',!!trial.review_rejected,
