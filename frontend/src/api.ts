@@ -99,20 +99,49 @@ export const api = {
     call<{events:import('./types').MappedTrigger[];count:number;conditions:string[]}>(
       '/sessions/' + encoded(id) + '/triggers/events?condition=' + encoded(condition)),
   triggerEpochs: (id: string, channel: string, condition: string, tmin: number,
-                  tmax: number, baselineEnd: number, excludeMarked: boolean) =>
+                  tmax: number, baselineEnd: number, excludeMarked: boolean,
+                  excludeRejected = false) =>
     call<import('./types').ConditionEpochs>('/sessions/' + encoded(id) + '/triggers/epochs?' +
       new URLSearchParams({channel,condition,tmin:String(tmin),tmax:String(tmax),
-        baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked)}).toString()),
+        baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked),
+        exclude_rejected:String(excludeRejected)}).toString()),
   triggerEventURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/triggers/export/events',
   triggerCodebookURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/triggers/export/codebook',
   triggerNPZURL: (id: string, condition: string, tmin: number, tmax: number,
-                  baselineEnd: number, excludeMarked: boolean) => ROOT +
+                  baselineEnd: number, excludeMarked: boolean, excludeRejected = false) => ROOT +
     '/sessions/' + encoded(id) + '/triggers/export/multichannel?' +
     new URLSearchParams({condition,tmin:String(tmin),tmax:String(tmax),baseline_end:String(baselineEnd),
-      exclude_marked:String(excludeMarked)}).toString(),
+      exclude_marked:String(excludeMarked),exclude_rejected:String(excludeRejected)}).toString(),
   triggerEpochURL: (id: string, channel:string, condition:string, tmin:number, tmax:number,
-                    baselineEnd:number, excludeMarked:boolean) => ROOT + '/sessions/' + encoded(id) +
+                    baselineEnd:number, excludeMarked:boolean, excludeRejected = false) => ROOT + '/sessions/' + encoded(id) +
     '/triggers/export/epochs?' + new URLSearchParams({channel,condition,tmin:String(tmin),
-      tmax:String(tmax),baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked)}).toString(),
+      tmax:String(tmax),baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked),
+      exclude_rejected:String(excludeRejected)}).toString(),
+  trialReview: (id:string, eventUID:string, rejected:boolean, reason:string) =>
+    call<{ event_uid:string; rejected:boolean; metadata:import('./types').RecordingInfo }>(
+      '/sessions/' + encoded(id) + '/trials/review', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({event_uid:eventUID,rejected,reason})
+      }),
+  trialReviewLog: (id:string) => call<{
+    recording:string; reviewed:{event_uid:string; rejected:boolean; reason:string;
+      onset_s:number|null; code:number|null; event_present:boolean}[]
+  }>('/sessions/' + encoded(id) + '/trials/review'),
+  conditionMetrics: (id:string,channel:string,tmin:number,tmax:number,
+    measureStart:number,measureEnd:number,baselineEnd:number,
+    excludeMarked:boolean,excludeRejected:boolean) =>
+    call<import('./types').ConditionMetrics>('/sessions/' + encoded(id) + '/triggers/metrics?' +
+      new URLSearchParams({channel,tmin:String(tmin),tmax:String(tmax),
+        measure_start:String(measureStart),measure_end:String(measureEnd),
+        baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked),
+        exclude_rejected:String(excludeRejected)}).toString()),
+  conditionMetricsURL: (id:string,channel:string,tmin:number,tmax:number,
+    measureStart:number,measureEnd:number,baselineEnd:number,
+    excludeMarked:boolean,excludeRejected:boolean) =>
+    ROOT + '/sessions/' + encoded(id) + '/triggers/export/metrics?' +
+    new URLSearchParams({channel,tmin:String(tmin),tmax:String(tmax),
+      measure_start:String(measureStart),measure_end:String(measureEnd),
+      baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked),
+      exclude_rejected:String(excludeRejected)}).toString(),
   remove: (id: string) => call<{ deleted: boolean }>('/sessions/' + encoded(id), { method: 'DELETE' })
 }
