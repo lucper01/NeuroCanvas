@@ -411,10 +411,13 @@ def trigger_event_list(key: str, condition: str = ""):
 def trigger_epochs(key: str, channel: str, condition: str = "",
                    tmin: float = -.2, tmax: float = .8,
                    baseline_end: float = 0, exclude_marked: bool = False,
-                   exclude_rejected: bool = False):
+                   exclude_rejected: bool = False,
+                   trial_offset: int = Query(0, ge=0),
+                   trial_limit: int = Query(100, ge=1, le=200)):
     return guard(lambda: condition_epochs(
         session_or_404(key), channel, condition, tmin, tmax,
-        baseline_end, exclude_marked, exclude_rejected=exclude_rejected,
+        baseline_end, exclude_marked, max_trials=trial_limit,
+        exclude_rejected=exclude_rejected, trial_offset=trial_offset,
     ))
 
 
