@@ -83,5 +83,30 @@ export const api = {
   qcMarkChannel: (id: string, name: string, marked: boolean) => call<RecordingInfo>(
     '/sessions/' + encoded(id) + '/qc/channels', { method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({name,marked}) }),
+  triggerCodebook: (id: string, definitions: import('./types').TriggerDefinition[]) =>
+    call<RecordingInfo>('/sessions/' + encoded(id) + '/triggers/codebook', {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body:JSON.stringify({definitions})
+    }),
+  triggerDetect: (id: string, channel: string, minWidthMs = 0, minIntervalMs = 0,
+                  tolerance = .25, commit = false) =>
+    call<import('./types').TriggerPreview>('/sessions/' + encoded(id) + '/triggers/detect', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({channel,min_width_ms:minWidthMs,min_interval_ms:minIntervalMs,tolerance,commit})
+    }),
+  triggerEvents: (id: string, condition = '') =>
+    call<{events:import('./types').MappedTrigger[];count:number;conditions:string[]}>(
+      '/sessions/' + encoded(id) + '/triggers/events?condition=' + encoded(condition)),
+  triggerEpochs: (id: string, channel: string, condition: string, tmin: number,
+                  tmax: number, baselineEnd: number, excludeMarked: boolean) =>
+    call<import('./types').ConditionEpochs>('/sessions/' + encoded(id) + '/triggers/epochs?' +
+      new URLSearchParams({channel,condition,tmin:String(tmin),tmax:String(tmax),
+        baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked)}).toString()),
+  triggerEventURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/triggers/export/events',
+  triggerCodebookURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/triggers/export/codebook',
+  triggerEpochURL: (id: string, channel:string, condition:string, tmin:number, tmax:number,
+                    baselineEnd:number, excludeMarked:boolean) => ROOT + '/sessions/' + encoded(id) +
+    '/triggers/export/epochs?' + new URLSearchParams({channel,condition,tmin:String(tmin),
+      tmax:String(tmax),baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked)}).toString(),
   remove: (id: string) => call<{ deleted: boolean }>('/sessions/' + encoded(id), { method: 'DELETE' })
 }
