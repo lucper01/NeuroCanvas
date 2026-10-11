@@ -17,15 +17,26 @@ export function demo(fs = 250, seconds = 40, alpha = 10, noise = 1, secondTone =
     matrix[4].push(Math.sin(2 * Math.PI * .23 * t) + .025 * gaussian())
     matrix[5].push((t > 12 && t < 15 ? .2 : .04) * gaussian())
   }
-  const names = ['EEG Fz', 'EEG Cz', 'ECG', 'EDA', 'RSP', 'EMG']
-  const types = ['eeg', 'eeg', 'ecg', 'eda', 'rsp', 'emg']
-  const units = ['µV', 'µV', 'a.u.', 'a.u.', 'a.u.', 'a.u.']
+  const codes = [11,12,21,22,11,12,21]
+  const onsets = [5,10,15,20,25,30,35]
+  const ttl = new Array(n).fill(0)
+  onsets.forEach((at,i)=>ttl.fill(codes[i],Math.round(at*fs),Math.min(n,Math.round(at*fs)+Math.max(1,Math.round(.012*fs)))))
+  matrix.push(ttl)
+  const names = ['EEG Fz', 'EEG Cz', 'ECG', 'EDA', 'RSP', 'EMG', 'TRIGGER TTL']
+  const types = ['eeg', 'eeg', 'ecg', 'eda', 'rsp', 'emg', 'stim']
+  const units = ['µV', 'µV', 'a.u.', 'a.u.', 'a.u.', 'a.u.', 'code']
   const info: RecordingInfo = {
     name: 'Démonstration physiologique synthétique', sfreq: fs,
     samples: n, duration: (n - 1) / fs,
     channels: names.map((name, i) => ({ name, type: types[i], unit: units[i] })),
     events: [5, 10, 15, 20, 25, 30, 35].map(time => ({ time, label: 'stimulus', duration: 0 })),
     history: [], source: 'synthetic/browser',
+    trigger_definitions: [
+      {code:11,meaning:'Visual standard',conditions:['Visual']},
+      {code:12,meaning:'Visual deviant',conditions:['Visual']},
+      {code:21,meaning:'Auditory standard',conditions:['Auditory']},
+      {code:22,meaning:'Auditory deviant',conditions:['Auditory']}
+    ],
     warnings: ['Données entièrement simulées, sans mesure physiologique humaine.']
   }
   return { info, raw: matrix, processed: matrix.map(y => [...y]) }
