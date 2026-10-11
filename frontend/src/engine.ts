@@ -81,6 +81,7 @@ export function importCSV(text: string, filename: string, customFs?: number): Lo
     const median = sorted[Math.floor(sorted.length / 2)]
     if (median > 0 && diffs.every(d => d > 0 && Math.abs(d - median) <= .02 * median)) inferred = 1 / median
   }
+  if (timeIndex >= 0 && !inferred) throw Error('Horodatages irréguliers. Rééchantillonner avant import.')
   const fs = customFs || inferred
   if (!fs || !Number.isFinite(fs) || fs <= 0) throw Error('Saisir la fréquence d’échantillonnage (Hz) ; aucun temps régulier détecté.')
   const info: RecordingInfo = {
