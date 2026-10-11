@@ -105,6 +105,11 @@ export const api = {
         baseline_end:String(baselineEnd),exclude_marked:String(excludeMarked)}).toString()),
   triggerEventURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/triggers/export/events',
   triggerCodebookURL: (id: string) => ROOT + '/sessions/' + encoded(id) + '/triggers/export/codebook',
+  triggerNPZURL: (id: string, condition: string, tmin: number, tmax: number,
+                  baselineEnd: number, excludeMarked: boolean) => ROOT +
+    '/sessions/' + encoded(id) + '/triggers/export/multichannel?' +
+    new URLSearchParams({condition,tmin:String(tmin),tmax:String(tmax),baseline_end:String(baselineEnd),
+      exclude_marked:String(excludeMarked)}).toString(),
   triggerEpochURL: (id: string, channel:string, condition:string, tmin:number, tmax:number,
                     baselineEnd:number, excludeMarked:boolean) => ROOT + '/sessions/' + encoded(id) +
     '/triggers/export/epochs?' + new URLSearchParams({channel,condition,tmin:String(tmin),
