@@ -7,7 +7,9 @@ export type TriggerPreview = { events: MappedTrigger[]; counts: Record<string, n
   sampling_rate: number; commit?: { committed: number; skipped_existing: number };
   metadata?: RecordingInfo }
 export type ConditionEpochs = { condition: string; channel: string; n: number; excluded_bounds: number;
-  excluded_manual: number; excluded_rejected?: number; exclude_rejected?: boolean; codes: Record<string,number>; time: number[]; mean: number[];
+  excluded_manual: number; excluded_rejected?: number; exclude_rejected?: boolean;
+  trial_offset?: number; trial_limit?: number; next_offset?: number | null;
+  codes: Record<string,number>; time: number[]; mean: number[];
   sem: number[] | null; trial_time: number[];
   trials: { event_index: number; event_uid?: string; time: number; code: number | null;
     meaning: string; conditions: string[]; signal: number[];
