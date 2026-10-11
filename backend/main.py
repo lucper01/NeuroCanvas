@@ -161,6 +161,7 @@ def add_event(key: str, event: EventRequest):
     if event.time > rec.duration:
         raise HTTPException(422, "Event is outside recording.")
     rec.events.append(event.model_dump())
+    rec.events.sort(key=lambda item: float(item["time"]))
     return rec.metadata()
 
 
