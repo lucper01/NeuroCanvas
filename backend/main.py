@@ -1,8 +1,14 @@
-"""Local-only NeuroCanvas API. Do not expose to untrusted networks."""
+"""NeuroCanvas scientific engine: local mode or intentionally isolated shared mode.
+
+Shared deployments still require HTTPS, protective edge rate limits, and a
+single-worker memory-bounded container. Not a medical device or data store.
+"""
 from __future__ import annotations
 
 import csv
 import io
+import os
+import time
 import json
 import shutil
 import tempfile
@@ -10,32 +16,72 @@ import uuid
 from pathlib import Path
 
 import numpy as np
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
+from access import (ENGINE_MODE, OWNER, GUEST_TTL_SECONDS, SESSION_TTL_SECONDS,
+    MAX_SHARED_UPLOAD_BYTES, MAX_SHARED_SESSIONS, MAX_SESSIONS_PER_GUEST,
+    MAX_CALLS_PER_MINUTE, MAX_GUEST_CREATES_PER_HOUR, throttle,
+    create_guest, validate_guest, session_owner)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from engine import (Recording, load_recording, viewport, power_spectrum, spectrogram,
                     evoked, physiology, apply_pipeline)
 
-app = FastAPI(title="NeuroCanvas local scientific engine", version="0.4.0",
-              description="Local exploratory biosignal processing. Not for clinical use.")
+app = FastAPI(title="NeuroCanvas scientific engine", version="0.5.0",
+              description="Exploratory signal processing in local/shared runtime. Not for clinical use.")
 TRUSTED_ORIGINS = [
     "http://localhost:5173", "http://127.0.0.1:5173",
     "http://localhost:4173", "http://127.0.0.1:4173",
     "https://lucper01.github.io",
 ]
+for entry in os.getenv("NEUROCANVAS_ALLOWED_ORIGINS", "").split(","):
+    origin = entry.strip()
+    if origin and origin not in TRUSTED_ORIGINS:
+        TRUSTED_ORIGINS.append(origin)
 app.add_middleware(
     CORSMiddleware, allow_origins=TRUSTED_ORIGINS,
     allow_credentials=False, allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Content-Type"], allow_private_network=True,
+    allow_headers=["Content-Type", "Authorization"], allow_private_network=True,
 )
 SESSIONS: dict[str, Recording] = {}
-MAX_UPLOAD = 150 * 1024 * 1024
+SESSION_META: dict[str, tuple[str, float]] = {}
+MAX_UPLOAD = 150 * 1024 * 1024 if ENGINE_MODE == "local" else MAX_SHARED_UPLOAD_BYTES
+
+
+def drop_expired_sessions():
+    now = time.time()
+    for key, (_, created_at) in list(SESSION_META.items()):
+        if now - created_at > SESSION_TTL_SECONDS:
+            SESSIONS.pop(key, None)
+            SESSION_META.pop(key, None)
+
+
+def store_session(recording: Recording) -> str:
+    drop_expired_sessions()
+    owner = session_owner()
+    if ENGINE_MODE == "shared":
+        mine = [key for key, (who, _) in SESSION_META.items() if who == owner]
+        if len(mine) >= MAX_SESSIONS_PER_GUEST:
+            raise HTTPException(429, "Two active recordings per guest. Remove one before uploading more.")
+        if len(SESSIONS) >= MAX_SHARED_SESSIONS:
+            raise HTTPException(503, "The shared analysis engine is at capacity. Try again later.")
+    elif len(SESSIONS) >= 6:
+        old = next(iter(SESSIONS))
+        SESSIONS.pop(old, None)
+        SESSION_META.pop(old, None)
+    key = uuid.uuid4().hex
+    SESSIONS[key] = recording
+    SESSION_META[key] = (owner, time.time())
+    return key
 
 
 def session_or_404(key: str) -> Recording:
-    if key not in SESSIONS:
-        raise HTTPException(status_code=404, detail="Unknown session (sessions are ephemeral).")
+    drop_expired_sessions()
+    if key not in SESSIONS or key not in SESSION_META:
+        raise HTTPException(status_code=404, detail="Unknown or expired session.")
+    if ENGINE_MODE == "shared" and SESSION_META[key][0] != session_owner():
+        raise HTTPException(status_code=404, detail="Unknown or expired session.")
     return SESSIONS[key]
 
 
@@ -44,6 +90,44 @@ def guard(action):
         return action()
     except (ValueError, RuntimeError, ImportError, OSError, IndexError, KeyError) as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@app.middleware("http")
+async def shared_access(request: Request, call_next):
+    """Guard all scientific actions; only health and token issuance are public."""
+    if ENGINE_MODE != "shared" or request.method == "OPTIONS":
+        return await call_next(request)
+    path = request.url.path
+    if path == "/api/health":
+        return await call_next(request)
+    ip = request.client.host if request.client else "unknown"
+    try:
+        if path == "/api/access/guest":
+            throttle("guest:" + ip, MAX_GUEST_CREATES_PER_HOUR, 3600)
+            return await call_next(request)
+        if not path.startswith("/api/"):
+            return JSONResponse(status_code=404, content={"detail": "Not found."})
+        authorization = request.headers.get("authorization", "")
+        if not authorization.startswith("Bearer "):
+            raise HTTPException(401, "Guest authorization required.")
+        guest = validate_guest(authorization[7:])
+        throttle("requests:" + guest, MAX_CALLS_PER_MINUTE, 60)
+        token = OWNER.set(guest)
+        try:
+            return await call_next(request)
+        finally:
+            OWNER.reset(token)
+    except HTTPException as err:
+        return JSONResponse(status_code=err.status_code, content={"detail": err.detail})
+
+
+@app.post("/api/access/guest")
+def issue_guest():
+    token, _ = create_guest()
+    return {"token": token, "expires_in": GUEST_TTL_SECONDS,
+            "limits": {"active_sessions": MAX_SESSIONS_PER_GUEST,
+                       "upload_bytes": MAX_SHARED_UPLOAD_BYTES},
+            "privacy": "Transient session in memory; no durable storage."}
 
 
 class ViewRequest(BaseModel):
@@ -69,7 +153,11 @@ def health():
     import mne
     import neurokit2
     return {"status": "ok", "engine": "Python / SciPy", "mne": mne.__version__,
-            "neurokit2": neurokit2.__version__, "sessions": len(SESSIONS)}
+            "neurokit2": neurokit2.__version__,
+            "mode": ENGINE_MODE, "auth": "guest" if ENGINE_MODE == "shared" else "none",
+            "max_upload_bytes": MAX_UPLOAD,
+            "features": ["mne", "neurokit2", "scipy", "bioread", "triggers", "epochs"],
+            "note": "Scientific research only, no clinical diagnostics."}
 
 
 @app.post("/api/import")
@@ -89,10 +177,7 @@ async def import_file(file: UploadFile = File(...), sampling_rate: float | None 
                     raise HTTPException(413, "File exceeds 150 MB upload limit.")
                 dest.write(content)
         recording = guard(lambda: load_recording(target, sampling_rate, Path(directory)))
-    if len(SESSIONS) >= 6:
-        SESSIONS.pop(next(iter(SESSIONS)))
-    key = uuid.uuid4().hex
-    SESSIONS[key] = recording
+    key = store_session(recording)
     return {"session_id": key, **recording.metadata()}
 
 
@@ -128,10 +213,7 @@ def create_demo():
         {"code":21,"meaning":"Auditory standard","conditions":["Auditory"]},
         {"code":22,"meaning":"Auditory deviant","conditions":["Auditory"]},
     ]
-    key = uuid.uuid4().hex
-    if len(SESSIONS) >= 6:
-        SESSIONS.pop(next(iter(SESSIONS)))
-    SESSIONS[key] = rec
+    key = store_session(rec)
     return {"session_id": key, **rec.metadata()}
 
 
