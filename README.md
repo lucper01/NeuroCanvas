@@ -120,7 +120,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000
 
 The API responds at **http://127.0.0.1:8000/api/health** and the automatically generated interactive API documentation at **http://127.0.0.1:8000/docs**. Select **Vérifier la connexion** in the web app. When the engine is running, newly imported recordings are processed by Python.
 
-Backend work is intentionally bound to loopback and keeps recordings in transient in-memory sessions. **Do not expose this API on a public IP or deploy it as-is to an untrusted host**, because this release has no account-level authentication or production rate limiting.
+The default `local` engine is intentionally bound to loopback. For **shared research demonstrations**, the optional `shared` engine mode adds signed temporary guest authorizations, per-guest recording isolation, upload and memory caps, time-limited sessions and API rate limits. The shared Docker image fails to boot without a server-side secret. See [Universal Python Engine deployment](docs/PYTHON_ENGINE.md) for Railway/Render configuration, operational limits and essential privacy cautions. **Anonymous guest access is not verified-user authentication and is not intended for identifiable human-subject or regulated health data.**
 
 ## Deploy the PWA on GitHub Pages
 
@@ -128,7 +128,7 @@ The repository includes a workflow at `.github/workflows/pages.yml`. Enable **Se
 
 https://lucper01.github.io/NeuroCanvas/
 
-GitHub Pages serves the **frontend only**. Advanced analysis requires the separately running Python server. Backend dependencies cannot run natively within a purely static GitHub Pages deployment.
+GitHub Pages serves the **frontend only**, while the Python scientific engine can run locally or as a separately hosted HTTPS service. In **Personalization → Python Engine**, choose browser only, local, configured public cloud or a custom institutional HTTPS endpoint. The public URL is embedded through the optional GitHub Actions repository variable `NEUROCANVAS_ENGINE_URL`. **Configuring Railway and setting that repository variable are distinct from publishing the PWA itself.** Details: [Python Engine deployment](docs/PYTHON_ENGINE.md).
 
 ## Processing and scientific validity
 
