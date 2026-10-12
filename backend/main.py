@@ -295,6 +295,7 @@ def export_csv(key: str, processed: bool = True):
 def delete_session(key: str):
     session_or_404(key)
     del SESSIONS[key]
+    SESSION_META.pop(key, None)
     return {"deleted": True}
 
 
