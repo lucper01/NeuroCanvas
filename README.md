@@ -20,7 +20,7 @@ The project is general-purpose and independent of any single experiment or resea
 | Learning Studio | Seeded synthetic EEG, ECG, EDA, respiration, EMG and trigger-code demonstrations with adjustable oscillation frequency and signal noise |
 | Export & Reproducibility | Raw/processed CSV, provenance JSON, locally restorable browser sessions, trigger codebooks, portable analysis protocols (no signal samples), reviewed-trial logs, per-condition measurement CSV, epoch CSV/NPZ and PNG/SVG figures |
 
-**Browser mode** can open CSV/TSV, load/save local JSON sessions, generate demonstrations, identify coded trigger pulses, group trial events and run fast exploratory analysis without a server. **Python mode** enables additional file formats and specialized biomedical algorithms. Python analysis runs **on the user's own computer**, not on GitHub Pages.
+**Browser mode** can open CSV/TSV, EDF, BioSemi BDF, BrainVision VHDR/EEG/VMRK companion files, and load/save local JSON sessions. It can generate demonstrations, identify coded trigger pulses, group trial events and run fast exploratory analysis without a server. **Python mode** enables additional file formats and specialized biomedical algorithms. Python analysis runs **on the user's own computer**, not on GitHub Pages.
 
 ## Visual interface
 
@@ -38,12 +38,26 @@ See [DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) for the color system, accessibilit
 | --- | --- | --- |
 | CSV / TSV, numeric columns | Yes | Yes |
 | JSON exported local session | Yes | Not required |
-| BioSemi BDF / EDF | No | MNE |
+| BioSemi BDF / EDF | Yes (continuous, uniform-Fs channels, physical calibration and TTL/status) | MNE |
 | FIF | No | MNE |
-| BrainVision VHDR + associated files | No | MNE |
+| BrainVision VHDR + associated files | Yes (.vhdr + .eeg + .vmrk, common multiplexed/vectorized binary variants) | MNE |
 | EEGLAB SET | No | MNE |
 | Biopac ACQ | No | bioread |
 | ZIP containing supported files | No | Yes (import selection; accompanied files retained) |
+
+### Import recorded electrophysiology files in the PWA
+
+Choose **Import** in NeuroCanvas, then select your EDF or BDF file directly: no Python service is needed. For BrainVision, select the three companion files (`.vhdr`, `.eeg`, `.vmrk`) in the same file dialog, using Ctrl-click / multiple file selection.
+
+The browser reads the **original recorded file locally**, without uploading it to GitHub Pages or a remote service. Physical calibrations from EDF/BDF and channel resolutions/units from BrainVision are applied; BDF Status 24-bit values are retained so their lower trigger bits can be extracted using the **0xFFFF** mask in Trigger & Epoch Studio. EDF+ annotations and BrainVision markers are retained when available.
+
+Import safeguards are intentional:
+
+- **Memory:** individual input files above 300 MiB are rejected in browser mode. At most 6 million channel × sample values are loaded; a larger recording is imported as a clearly marked **initial preview** with an explicit truncation warning. The original file is never edited.
+- **Timing:** EDF+/BDF+ discontinuous segments and multiple channel sample rates are rejected instead of silently shifting time or resampling. Use MNE-Python for these cases.
+- **Scope:** raw FIF, EEGLAB SET, Biopac ACQ and ZIP bundles still require the local Python engine. Browser mode supports continuous EDF/BDF and the specified BrainVision binary variants only.
+- **Scientific quality:** verify original sample rate, hardware trigger latency, trigger codes, gain, units and annotations before interpreting results. Browser calculations are exploratory; use a validated pipeline for research publications.
+
 
 For CSV/TSV, use a header row and one signal per column. Optional **time_s** should contain equally spaced time coordinates in seconds. Without it, specify the **sampling frequency in Hz** before import. Never assume a default sampling frequency for real data. An example:
 
