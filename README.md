@@ -49,7 +49,7 @@ See [DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) for the color system, accessibilit
 
 Choose **Import** in NeuroCanvas, then select your EDF or BDF file directly: no Python service is needed. For BrainVision, select the three companion files (`.vhdr`, `.eeg`, `.vmrk`) in the same file dialog, using Ctrl-click / multiple file selection.
 
-The browser reads the **original recorded file locally**, without uploading it to GitHub Pages or a remote service. Physical calibrations from EDF/BDF and channel resolutions/units from BrainVision are applied; BDF Status 24-bit values are retained so their lower trigger bits can be extracted using the **0xFFFF** mask in Trigger & Epoch Studio. EDF+ annotations and BrainVision markers are retained when available.
+The browser reads the **original recorded file locally**, without uploading it to GitHub Pages or a remote service. When the local Python service is actually available, NeuroCanvas tries the full Python EDF/BDF import first, falling back to the browser preview if Python cannot load the file; the fallback is signaled as a warning. Physical calibrations from EDF/BDF and channel resolutions/units from BrainVision are applied; BDF Status 24-bit values are retained so their lower trigger bits can be extracted using the **0xFFFF** mask in Trigger & Epoch Studio. EDF+ annotations and BrainVision markers are retained when available.
 
 Import safeguards are intentional:
 
