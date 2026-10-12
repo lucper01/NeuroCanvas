@@ -206,6 +206,7 @@ export default function App() {
       const address=engineAddress(engineTarget)
       if(!address) {
         disconnectEngine();setConnected(false);setEngineHealth(null);setActiveEngineURL(null)
+        setRemote(null);setRemoteInfo(null)
         success('Mode navigateur activé. Aucun fichier n’est transféré.')
         return
       }
@@ -217,7 +218,8 @@ export default function App() {
       success(health.auth==='guest'?'Moteur Python partagé connecté (session temporaire).':
         'Moteur Python local connecté : MNE et NeuroKit2 disponibles.')
     }catch(e){
-      setConnected(false);setEngineHealth(null);setActiveEngineURL(null)
+      disconnectEngine();setConnected(false);setEngineHealth(null);setActiveEngineURL(null)
+      setRemote(null);setRemoteInfo(null)
       error(e)
     }finally{setChecking(false)}
   // This action is initiated by explicit user interaction.
