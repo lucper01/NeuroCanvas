@@ -48,8 +48,12 @@ function tal(bytes:Uint8Array,out:EventMark[]){
     if(!/^[+-]?\d+(\.\d+)?$/.test(onset.trim()))continue
     const time=Number(onset),length=duration?Number(duration):0
     if(!Number.isFinite(time)||!Number.isFinite(length)||length<0)continue
-    for(const value of chunks.slice(1))if(value.trim())
-      out.push({time,duration:length,label:value.trim(),source:'edf-annotation'})
+    for(const value of chunks.slice(1))if(value.trim()){
+      const label=value.trim()
+      const codeMatch=/^(?:S|R|T|Stim|Stimulus|Trigger)\s*[:#-]?\s*(\d+)$/i.exec(label)
+      const code=codeMatch?Number(codeMatch[1]):undefined
+      out.push({time,duration:length,label,code,source:'edf-annotation'})
+    }
   }
 }
 export function parseEDFBDF(buffer:ArrayBuffer,filename:string,sourceFileBytes=buffer.byteLength):LocalRecording{
