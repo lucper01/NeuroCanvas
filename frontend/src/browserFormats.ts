@@ -5,7 +5,7 @@
  */
 import type { EventMark, LocalRecording, RecordingInfo } from './types'
 
-const MAX_VALUES=6000000, MAX_CHANNELS=256, MAX_BYTES=300*1024*1024
+const MAX_VALUES=6000000, MAX_CHANNELS=256
 const latin=new TextDecoder('latin1')
 const field=(b:Uint8Array,o:number,n:number)=>latin.decode(b.subarray(o,o+n)).replace(/\0/g,'').trim()
 function integer(b:Uint8Array,o:number,n:number,name:string){
@@ -52,7 +52,7 @@ function tal(bytes:Uint8Array,out:EventMark[]){
       out.push({time,duration:length,label:value.trim(),source:'edf-annotation'})
   }
 }
-export function parseEDFBDF(buffer:ArrayBuffer,filename:string):LocalRecording{
+export function parseEDFBDF(buffer:ArrayBuffer,filename:string,sourceFileBytes=buffer.byteLength):LocalRecording{
   const bytes=new Uint8Array(buffer),bdf=/\.bdf$/i.test(filename),sampleBytes=bdf?3:2
   if(bytes.length<512)throw Error('Fichier EDF/BDF tronqué : en-tête absent.')
   const head=integer(bytes,184,8,'taille en-tête')
@@ -83,9 +83,10 @@ export function parseEDFBDF(buffer:ArrayBuffer,filename:string):LocalRecording{
   if(!Number.isFinite(fs)||fs<=0||fs>100000)throw Error('Fréquence EDF/BDF invalide.')
   const recordBytes=samples.reduce((a,b)=>a+b,0)*sampleBytes
   if(!Number.isSafeInteger(recordBytes)||recordBytes<=0)throw Error('Taille enregistrement EDF/BDF invalide.')
-  const available=Math.floor((bytes.length-head)/recordBytes)
-  const total=recordsHeader===-1?available:recordsHeader
-  if(total<=0||total>available)throw Error('Échantillons EDF/BDF incomplets ou tronqués.')
+  const providedRecords=Math.floor((bytes.length-head)/recordBytes)
+  const originalRecords=Math.floor((sourceFileBytes-head)/recordBytes)
+  const total=recordsHeader===-1?originalRecords:recordsHeader
+  if(total<=0||total>originalRecords)throw Error('Échantillons EDF/BDF incomplets ou tronqués.')
   if(picks.some(i=>!Number.isInteger(samples[i])||samples[i]<=0||
     Math.abs(samples[i]/seconds-fs)>1e-7*Math.max(1,fs)))
     throw Error('EDF/BDF contient plusieurs fréquences de canaux : rééchantillonner explicitement avec MNE-Python.')
@@ -96,6 +97,7 @@ export function parseEDFBDF(buffer:ArrayBuffer,filename:string):LocalRecording{
   const selected=Math.min(all,Math.floor(MAX_VALUES/picks.length))
   if(selected<=0)throw Error('Mémoire navigateur insuffisante pour les canaux EDF/BDF.')
   const loadedRecords=Math.min(total,Math.ceil(selected/perRecord))
+  if(providedRecords<loadedRecords)throw Error('La plage EDF/BDF chargée est tronquée.')
   const warnings:string[]=[]
   if(selected<all)warnings.push(
     'Aperçu tronqué : '+(selected/fs).toFixed(1)+' s chargées sur '+(all/fs).toFixed(1)+' s (limite mémoire navigateur). Le fichier original est intact.')
@@ -202,17 +204,86 @@ export function parseBrainVision(header:string,eeg:ArrayBuffer,markers:string|nu
   return result(filename,fs,data,descriptors.map(({name,type,unit})=>({name,type,unit})),
     events.sort((a,b)=>a.time-b.time),warnings,'brainvision/browser')
 }
+
+/** Read only the first N recording blocks. Can open very large original BDF/EDF
+    without copying the entire acquisition into the browser's heap. */
+async function readEDFFile(file:File):Promise<LocalRecording>{
+  const first=new Uint8Array(await file.slice(0,256).arrayBuffer())
+  if(first.length<256)throw Error('En-tête EDF/BDF incomplet.')
+  const head=integer(first,184,8,'header bytes')
+  const nchan=integer(first,252,4,'channels')
+  const duration=numeric(first,244,8,'record duration')
+  if(nchan<=0||nchan>MAX_CHANNELS||head!==256+256*nchan||duration<=0)
+    throw Error('En-tête EDF/BDF invalide.')
+  const header=new Uint8Array(await file.slice(0,head).arrayBuffer())
+  if(header.length<head)throw Error('En-tête EDF/BDF tronqué.')
+  const names=Array.from({length:nchan},(_,i)=>field(header,256+i*16,16))
+  const sampleStart=256+216*nchan
+  const sampleCounts=Array.from({length:nchan},(_,i)=>Number(field(header,sampleStart+i*8,8)))
+  if(sampleCounts.some(n=>!Number.isSafeInteger(n)||n<=0))
+    throw Error('Nombre d’échantillons EDF/BDF invalide.')
+  const channelCount=names.filter(name=>!/^(EDF|BDF)\s+Annotations/i.test(name)).length
+  if(!channelCount)throw Error('Aucun canal de signal.')
+  const recordBytes=sampleCounts.reduce((sum,n)=>sum+n,0)*(/\.bdf$/i.test(file.name)?3:2)
+  if(!Number.isSafeInteger(recordBytes)||recordBytes<=0)throw Error('Taille de bloc EDF/BDF invalide.')
+  const reportedRecords=integer(header,236,8,'records')
+  const sourceRecords=reportedRecords===-1?
+    Math.floor((file.size-head)/recordBytes):reportedRecords
+  if(sourceRecords<=0||file.size<head+sourceRecords*recordBytes)
+    throw Error('Enregistrement EDF/BDF tronqué sur le disque.')
+  const maxSamples=Math.floor(MAX_VALUES/channelCount)
+  const recordsToRead=Math.min(sourceRecords,Math.ceil(maxSamples/sampleCounts[
+    names.findIndex(name=>!/^(EDF|BDF)\s+Annotations/i.test(name))
+  ]))
+  const sampledFile=await file.slice(0,head+recordsToRead*recordBytes).arrayBuffer()
+  return parseEDFBDF(sampledFile,file.name,file.size)
+}
+async function readTextFile(file:File):Promise<string>{
+  const buffer=await file.arrayBuffer()
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(buffer)}
+  catch{return new TextDecoder('windows-1252').decode(buffer)}
+}
+async function readBrainVisionFiles(files:File[],headFile:File):Promise<LocalRecording>{
+  const header=await readTextFile(headFile)
+  const metadata=ini(header),common=metadata['common infos']||{},binary=metadata['binary infos']||{}
+  const count=Number(common.numberofchannels)
+  if(!Number.isInteger(count)||count<=0||count>MAX_CHANNELS)
+    throw Error('Nombre de canaux BrainVision invalide.')
+  const format=(binary.binaryformat||'INT_16').toUpperCase()
+  const bytesPerSample:Record<string,number>={INT_16:2,UINT_16:2,IEEE_FLOAT_32:4}
+  const bytes=bytesPerSample[format]
+  if(!bytes)throw Error('Format BrainVision non pris en charge : '+format)
+  const filename=basename(common.datafile||'')
+  const markName=basename(common.markerfile||'')
+  const dataFile=files.find(f=>basename(f.name)===filename)
+  const markersFile=files.find(f=>basename(f.name)===markName)
+  if(!dataFile)throw Error('BrainVision : sélectionner ensemble les fichiers .vhdr et .eeg associés.')
+  if(markName&&!markersFile)throw Error('BrainVision : fichier .vmrk manquant. Sélectionner les trois fichiers associés.')
+  if(dataFile.size%(count*bytes)!==0)
+    throw Error('Binaire BrainVision incomplet ou incompatible avec le nombre de canaux.')
+  const originalLength=dataFile.size/(count*bytes)
+  const selected=Math.min(originalLength,Math.floor(MAX_VALUES/count))
+  if(!selected)throw Error('Fichier BrainVision vide.')
+  const orientation=(common.dataorientation||'MULTIPLEXED').toUpperCase()
+  let buffer:ArrayBuffer
+  if(orientation==='MULTIPLEXED')buffer=await dataFile.slice(0,selected*count*bytes).arrayBuffer()
+  else if(orientation==='VECTORIZED'){
+    const blocks=await Promise.all(Array.from({length:count},(_,i)=>
+      dataFile.slice(i*originalLength*bytes,i*originalLength*bytes+selected*bytes).arrayBuffer()))
+    const compact=new Uint8Array(selected*count*bytes)
+    blocks.forEach((part,i)=>compact.set(new Uint8Array(part),i*selected*bytes))
+    buffer=compact.buffer
+  }else throw Error('Orientation BrainVision non prise en charge : '+orientation)
+  const rec=parseBrainVision(header,buffer,markersFile?await readTextFile(markersFile):null,headFile.name)
+  if(selected<originalLength)rec.info.warnings.unshift(
+    'Aperçu BrainVision tronqué à '+(selected/rec.info.sfreq).toFixed(1)+' s sur '+
+    (originalLength/rec.info.sfreq).toFixed(1)+' s. Le fichier original est intact.')
+  return rec
+}
 export async function importScientificFiles(files:File[]):Promise<LocalRecording>{
   if(!files.length)throw Error('Aucun fichier sélectionné.')
-  if(files.some(x=>x.size>MAX_BYTES))
-    throw Error('Fichier supérieur à 300 Mo : importer depuis le moteur Python local.')
-  const main=files.find(x=>/\.(bdf|edf|vhdr)$/i.test(x.name))
-  if(!main)throw Error('Ce format nécessite le moteur Python local. Mode navigateur : EDF, BDF, BrainVision (.vhdr/.eeg/.vmrk), CSV et TSV. FIF, SET et ACQ requièrent le backend.')
-  if(/\.(bdf|edf)$/i.test(main.name))return parseEDFBDF(await main.arrayBuffer(),main.name)
-  const header=await main.text(),common=ini(header)['common infos']||{}
-  const name=basename(common.datafile||''),markers=basename(common.markerfile||'')
-  const data=files.find(x=>basename(x.name)===name),marker=files.find(x=>basename(x.name)===markers)
-  if(!data)throw Error('BrainVision : sélectionner ensemble le fichier .vhdr et le fichier .eeg auquel il fait référence.')
-  if(markers&&!marker)throw Error('BrainVision : fichier .vmrk manquant. Sélectionner ensemble .vhdr, .eeg et .vmrk.')
-  return parseBrainVision(header,await data.arrayBuffer(),marker?await marker.text():null,main.name)
+  const main=files.find(f=>/\.(bdf|edf|vhdr)$/i.test(f.name))
+  if(!main)throw Error('Mode navigateur : EDF, BDF, BrainVision (.vhdr/.eeg/.vmrk), CSV et TSV. FIF, SET et ACQ requièrent le moteur Python local.')
+  if(/\.(bdf|edf)$/i.test(main.name))return readEDFFile(main)
+  return readBrainVisionFiles(files,main)
 }
