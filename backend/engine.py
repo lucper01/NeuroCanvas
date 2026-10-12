@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import os
 import io
 import json
 import zipfile
@@ -12,8 +13,8 @@ import pandas as pd
 from scipy import signal
 
 
-MAX_VALUES = 20_000_000
-MAX_ARCHIVE_BYTES = 250 * 1024 * 1024
+MAX_VALUES = 2_000_000 if os.getenv("NEUROCANVAS_ENGINE_MODE", "local") == "shared" else 20_000_000
+MAX_ARCHIVE_BYTES = 40 * 1024 * 1024 if os.getenv("NEUROCANVAS_ENGINE_MODE", "local") == "shared" else 250 * 1024 * 1024
 
 
 @dataclass
