@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { connectEngine, disconnectEngine, downloadFromEngine, engineEndpoints,
+import { connectEngine, disconnectEngine, engineEndpoints,
   normalizeEngineURL, api } from './api'
 
 const response=(status:number, body:unknown)=>new Response(JSON.stringify(body),{
@@ -64,14 +64,13 @@ describe('Universal Python Engine Client',()=>{
       if(String(uri).endsWith('/health'))return response(200,{status:'ok',engine:'Python',auth:'guest'})
       if(String(uri).endsWith('/guest'))return response(200,{token:'signed_guest'})
       expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer signed_guest')
-      return new Response('onset_s,code\n0.5,11',{status:200})
+      return response(200,{name:'Signal',samples:100})
     })
     vi.stubGlobal('fetch',signed)
-    vi.stubGlobal('URL',{...URL,createObjectURL:()=> 'blob:example',revokeObjectURL:()=>{}})
     // Do not initiate a synthetic click in unit tests; network/header integrity
     // is exercised through a fetch on the signed export route.
     await connectEngine('https://science.example.org')
-    const result=await api.triggerEvents('session-one')
+    const result=await api.metadata('session-one')
     expect(result).toBeDefined()
   })
 })
