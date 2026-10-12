@@ -231,9 +231,25 @@ export default function App() {
         const restored = applySteps({ ...loaded, processed: loaded.raw.map(x => [...x]) }, loaded.info.history || [])
         activate(restored.info, null, restored); success('Session locale restaurée.')
       } else if (/\.(edf|bdf|vhdr)$/i.test(primary.name)) {
-        const parsed = await importScientificFiles(files)
-        activate(parsed.info, null, parsed)
-        success('Fichier scientifique chargé localement. Vérifier unités, fréquence et avertissements.')
+        let importedByPython = false
+        if (connected && /\.(edf|bdf)$/i.test(primary.name)) {
+          try {
+            const parsed = await api.upload(primary)
+            activate(parsed, parsed.session_id)
+            success('Fichier complet analysé par le moteur scientifique Python.')
+            importedByPython = true
+          } catch {
+            // The browser fallback is explicitly bounded and labels any truncation.
+          }
+        }
+        if (!importedByPython) {
+          const parsed = await importScientificFiles(files)
+          if (connected && /\.(edf|bdf)$/i.test(primary.name)) {
+            parsed.info.warnings.unshift('Le moteur Python n’a pas pu importer ce fichier : aperçu navigateur utilisé à la place.')
+          }
+          activate(parsed.info, null, parsed)
+          success('Fichier scientifique chargé localement. Vérifier unités, fréquence et avertissements.')
+        }
       } else if (connected) {
         const result = await api.upload(primary, fsInput ? Number(fsInput) : undefined)
         activate(result, result.session_id); success('Fichier analysé dans le moteur scientifique Python.')
