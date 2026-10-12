@@ -3,6 +3,7 @@ import type { RecordingInfo, Step, Trace, Spectrum, TimeFrequency, Evoked } from
 /** Engine configuration is chosen at runtime, not compiled to localhost for all visitors. */
 const LOCAL_ROOT = 'http://127.0.0.1:8000/api'
 const CLOUD_ENV = (import.meta.env.VITE_NEUROCANVAS_ENGINE_URL || '').trim()
+let hostedRoot: string | null = CLOUD_ENV ? new URL(CLOUD_ENV).toString() : null
 let ROOT = LOCAL_ROOT
 let guestAuthorization: string | null = null
 
@@ -22,7 +23,7 @@ export function normalizeEngineURL(source:string):string{
 }
 export const engineEndpoints={
   local:LOCAL_ROOT,
-  cloud:CLOUD_ENV?normalizeEngineURL(CLOUD_ENV):null,
+  get cloud(){return hostedRoot ? normalizeEngineURL(hostedRoot) : null},
   get current(){return ROOT},
   get connectedToGuest(){return guestAuthorization!==null}
 }
@@ -61,6 +62,28 @@ export async function connectEngine(address:string):Promise<EngineHealth>{
   guestAuthorization=guest
   return info
 }
+/** Public deploy URL is configuration only; no API secret is stored here.
+ * This allows hosted GitHub Pages users to switch to a shared engine without
+ * rebuilding the PWA or modifying GitHub Actions variables.
+ */
+export async function discoverHostedEngine():Promise<string|null>{
+  if(hostedRoot)return normalizeEngineURL(hostedRoot)
+  try{
+    const base=import.meta.env.BASE_URL || '/'
+    const url=new URL(base.replace(/\/?$/, '/')+'engine-config.json',
+      typeof document==='undefined'?'https://example.invalid/':document.baseURI)
+    const response=await fetch(url.toString(),{cache:'no-store',signal:AbortSignal.timeout(6000)})
+    if(!response.ok)return null
+    const data=await response.json() as {engine_url?:unknown}
+    if(typeof data.engine_url!=='string'||!data.engine_url.trim())return null
+    const validated=normalizeEngineURL(data.engine_url)
+    hostedRoot=validated
+    return validated
+  }catch{
+    return null
+  }
+}
+
 export function disconnectEngine(){
   ROOT=LOCAL_ROOT
   guestAuthorization=null
