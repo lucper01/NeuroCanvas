@@ -5,7 +5,7 @@ import { Activity, Check, Download, FileUp, Plus, RefreshCw, Trash2 } from 'luci
 import type { ConditionEpochs, ConditionMetrics, LocalRecording, RecordingInfo,
   TriggerDefinition, TriggerPreview } from './types'
 import type { Language } from './localization'
-import { api } from './api'
+import { api, downloadFromEngine } from './api'
 import { commitTriggers, conditionEpochs, detectTriggers, epochCSV, eventCode,
   eventCSV, mapTrigger, validateDefinitions, setLocalTrialDecision } from './triggers'
 import { summarizeConditions, metricsCSV } from './conditionMetrics'
@@ -344,7 +344,7 @@ export default function TriggerStudio({
     }catch(e){error(e)}finally{setBusy(false)}
   }
   const exportEvents=()=>{
-    if(remote)window.open(api.triggerEventURL(remote),'_blank','noopener,noreferrer')
+    if(remote)void downloadFromEngine(api.triggerEventURL(remote),'neurocanvas_triggers.csv').catch(error)
     else csvDownload('neurocanvas_triggers.csv',eventCSV(record))
   }
   const exportCodebook=()=>{
@@ -356,8 +356,8 @@ export default function TriggerStudio({
     if(!averaged){error(t('Aucun essai calculé.'));return}
     try{
       const cfg=epochSnapshot
-      if(remote && cfg)window.open(api.triggerEpochURL(remote,cfg.channel,cfg.condition,cfg.tmin,cfg.tmax,
-        cfg.baselineEnd,cfg.excludeMarked,cfg.excludeRejected),'_blank','noopener,noreferrer')
+      if(remote && cfg)void downloadFromEngine(api.triggerEpochURL(remote,cfg.channel,cfg.condition,cfg.tmin,cfg.tmax,
+        cfg.baselineEnd,cfg.excludeMarked,cfg.excludeRejected),'neurocanvas_epochs.csv').catch(error)
       else csvDownload('neurocanvas_epochs.csv',epochCSV(averaged))
     }catch(e){error(e)}
   }
@@ -389,9 +389,9 @@ export default function TriggerStudio({
   }
   const exportMetrics=()=>{
     if(!metrics){error(t('Calculer les mesures'));return}
-    if(remote)window.open(api.conditionMetricsURL(remote,metrics.channel,metrics.tmin,metrics.tmax,
+    if(remote)void downloadFromEngine(api.conditionMetricsURL(remote,metrics.channel,metrics.tmin,metrics.tmax,
       metrics.measurement_window[0],metrics.measurement_window[1],metrics.baseline_end,
-      metrics.exclude_marked,metrics.exclude_rejected),'_blank','noopener,noreferrer')
+      metrics.exclude_marked,metrics.exclude_rejected),'neurocanvas_condition_metrics.csv').catch(error)
     else csvDownload('neurocanvas_condition_metrics.csv',metricsCSV(metrics))
   }
   const exportReviews=()=>{
@@ -629,11 +629,12 @@ export default function TriggerStudio({
             </div>
           </div></>}
         <button className="primary" onClick={exportEpochs}><Download size={15}/>{t('Exporter les époques CSV')}</button>
-        {remote && <button className="outline" onClick={() => window.open(api.triggerNPZURL(
+        {remote && <button className="outline" onClick={() => void downloadFromEngine(api.triggerNPZURL(
           remote,epochSnapshot?.condition||viewCondition,epochSnapshot?.tmin??tmin,
           epochSnapshot?.tmax??tmax,epochSnapshot?.baselineEnd??baselineEnd,
           epochSnapshot?.excludeMarked??excludeMarked,
-          epochSnapshot?.excludeRejected??excludeRejected),'_blank','noopener,noreferrer')}>
+          epochSnapshot?.excludeRejected??excludeRejected),
+          'neurocanvas_multichannel_epochs.npz').catch(error)}>
           <Download size={15}/>{t('Exporter toutes les voies (NPZ)')}</button>}
         <p className="note">{t('Les essais visibles sont un aperçu ; les exports Python sont en pleine résolution.')}</p>
       </div>}

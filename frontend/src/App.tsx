@@ -12,7 +12,8 @@ import { qualityWindows, validateMarkedSegment } from './qc'
 import { loadPreferences, savePreferences, resolveLanguage, localizeTree } from './localization'
 import type { Preferences } from './localization'
 import { demo, importCSV, applySteps, viewport, spectrum, spectrogram, erp, fourier } from './engine'
-import { api } from './api'
+import { api, connectEngine, disconnectEngine, downloadFromEngine, discoverHostedEngine, engineEndpoints } from './api'
+import type { EngineHealth } from './api'
 import { importScientificFiles } from './browserFormats'
 import TriggerStudio from './TriggerStudio'
 import NeuroDashboard from './NeuroDashboard'
@@ -125,6 +126,11 @@ export default function App() {
   const [remote, setRemote] = useState<string | null>(null)
   const [remoteInfo, setRemoteInfo] = useState<RecordingInfo | null>(null)
   const [connected, setConnected] = useState(false)
+  const [engineTarget, setEngineTarget] = useState<'browser'|'local'|'cloud'|'custom'>(
+    engineEndpoints.cloud ? 'cloud' : 'browser')
+  const [customEngineURL, setCustomEngineURL] = useState('')
+  const [engineHealth, setEngineHealth] = useState<EngineHealth | null>(null)
+  const [activeEngineURL, setActiveEngineURL] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [busy, setBusy] = useState(false)
   const [selection, setSelection] = useState<string[]>(['EEG Fz', 'EEG Cz'])
@@ -191,13 +197,47 @@ export default function App() {
   const badChannels = info?.bad_channels || []
   const badSegments = info?.bad_segments || []
 
+  const engineAddress = (target: 'browser'|'local'|'cloud'|'custom') =>
+    target === 'local' ? engineEndpoints.local :
+    target === 'cloud' ? engineEndpoints.cloud : target === 'custom' ? customEngineURL : null
   const ping = useCallback(async () => {
     setChecking(true)
-    try { await api.health(); setConnected(true); success('Moteur Python connecté : MNE et NeuroKit2 disponibles.') }
-    catch { setConnected(false); setNotice({ kind: 'error', message: 'Moteur Python indisponible. Mode navigateur hors ligne toujours disponible.' }) }
-    finally { setChecking(false) }
-  }, [success, setNotice])
-  useEffect(() => { void api.health().then(() => setConnected(true)).catch(() => setConnected(false)) }, [])
+    try {
+      const address=engineAddress(engineTarget)
+      if(!address) {
+        disconnectEngine();setConnected(false);setEngineHealth(null);setActiveEngineURL(null)
+        setRemote(null);setRemoteInfo(null)
+        success('Mode navigateur activé. Aucun fichier n’est transféré.')
+        return
+      }
+      const health=await connectEngine(address)
+      setConnected(true);setEngineHealth(health);setActiveEngineURL(engineEndpoints.current)
+      // A remote session belongs to a particular guest/engine. After switching,
+      // discard the old reference so no request is sent to a different backend.
+      setRemote(null);setRemoteInfo(null)
+      success(health.auth==='guest'?'Moteur Python partagé connecté (session temporaire).':
+        'Moteur Python local connecté : MNE et NeuroKit2 disponibles.')
+    }catch(e){
+      disconnectEngine();setConnected(false);setEngineHealth(null);setActiveEngineURL(null)
+      setRemote(null);setRemoteInfo(null)
+      error(e)
+    }finally{setChecking(false)}
+  // This action is initiated by explicit user interaction.
+  },[engineTarget,customEngineURL,success,error])
+  useEffect(()=>{
+    let active=true
+    void discoverHostedEngine().then(url=>{
+      if(!active||!url)return
+      setEngineTarget(current=>current==='browser'?'cloud':current)
+      void connectEngine(url).then(health=>{
+        if(!active)return
+        setConnected(true);setEngineHealth(health);setActiveEngineURL(engineEndpoints.current)
+      }).catch(()=>{
+        if(active){setConnected(false);setEngineHealth(null)}
+      })
+    })
+    return()=>{active=false}
+  },[])
 
   const activate = (newInfo: RecordingInfo, id: string | null, local?: LocalRecording) => {
     if (local) setRecord(local)
@@ -222,6 +262,8 @@ export default function App() {
     setBusy(true)
     try {
       const primary = files.find(f => /\.(bdf|edf|vhdr|json|csv|tsv|fif|set|acq|zip)$/i.test(f.name)) || files[0]
+      const allowSharedTransfer = () => engineHealth?.mode !== 'shared' || window.confirm(
+        'L’acquisition sera transférée vers un serveur Python distant. Ne transférez que des données autorisées et conformes aux règles de confidentialité de votre établissement. Confirmer l’envoi ?')
       if (primary.name.toLowerCase().endsWith('.json') && files.length === 1) {
         const loaded = JSON.parse(await primary.text()) as LocalRecording
         if (!loaded.info || !Array.isArray(loaded.raw) || !loaded.raw.length || loaded.raw[0].length !== loaded.info.samples)
@@ -232,7 +274,8 @@ export default function App() {
         activate(restored.info, null, restored); success('Session locale restaurée.')
       } else if (/\.(edf|bdf|vhdr)$/i.test(primary.name)) {
         let importedByPython = false
-        if (connected && /\.(edf|bdf)$/i.test(primary.name)) {
+        if (connected && /\.(edf|bdf)$/i.test(primary.name) &&
+          allowSharedTransfer()) {
           try {
             const parsed = await api.upload(primary)
             activate(parsed, parsed.session_id)
@@ -251,6 +294,7 @@ export default function App() {
           success('Fichier scientifique chargé localement. Vérifier unités, fréquence et avertissements.')
         }
       } else if (connected) {
+        if (!allowSharedTransfer()) throw Error('Transfert vers le serveur distant annulé.')
         const result = await api.upload(primary, fsInput ? Number(fsInput) : undefined)
         activate(result, result.session_id); success('Fichier analysé dans le moteur scientifique Python.')
       } else if (/\.(csv|tsv)$/i.test(primary.name)) {
@@ -444,7 +488,8 @@ export default function App() {
     info, method: remote ? 'Python/SciPy/MNE/NeuroKit2' : 'JavaScript / educational preview',
     signal_units: info?.channels.map(c => ({ name: c.name, unit: c.unit, type: c.type })) }, null, 2), 'application/json', 'neurocanvas_provenance.json')
   const exportCSV = (raw = false) => {
-    if (remote) { window.open(api.csvURL(remote, !raw), '_blank', 'noopener,noreferrer'); return }
+    if (remote) { void downloadFromEngine(api.csvURL(remote,!raw),
+      raw?'neurocanvas_raw.csv':'neurocanvas_processed.csv').catch(error); return }
     const header = ['time_s', ...record.info.channels.map(c => c.name)]
     const output = [header.map(csvValue).join(',')]
     for (let j = 0; j < record.info.samples; j++) {
@@ -513,9 +558,12 @@ export default function App() {
       <div className="side-bottom"><div className={'connection ' + (connected ? 'online' : '')}>
         {connected ? <Wifi size={16} /> : <WifiOff size={16} />}
         <div><strong>{connected ? 'Python engine ready' : 'Browser mode'}</strong>
-          <small>{connected ? 'MNE · NeuroKit2 · SciPy' : 'Offline-capable exploration'}</small></div>
+          <small>{connected ? (engineHealth?.mode==='shared'?'Cloud · MNE · NeuroKit2':'Local · MNE · NeuroKit2') :
+            'Offline-capable exploration'}</small></div>
       </div><button className="plain" onClick={() => void ping()} disabled={checking}>
-        <RefreshCw size={15} className={checking ? 'spin' : ''} /> Vérifier la connexion</button></div>
+        <RefreshCw size={15} className={checking ? 'spin' : ''} /> Vérifier la connexion</button>
+      <button className="plain" onClick={()=>setSettingsOpen(true)}>
+        <Settings2 size={15}/> Python Engine</button></div>
     </aside>
 
     {menu && <div className="overlay" onClick={() => setMenu(false)} />}
@@ -542,6 +590,41 @@ export default function App() {
                 <span><strong>{item.title}</strong><small>{item.desc}</small></span>
               </label>)}
             </div>
+          </div>
+          <div className="preferences-group engine-settings">
+            <h3>Python Engine · Accès universel</h3>
+            <p>Choisissez un moteur local ou un service partagé. Sans moteur, les fonctions du navigateur restent disponibles.</p>
+            <div className="preference-options">
+              {([
+                {id:'browser',title:'Navigateur uniquement',desc:'Aucune donnée transmise au serveur'},
+                {id:'local',title:'Moteur local',desc:'Python sur cet ordinateur (127.0.0.1:8000)'},
+                ...(engineEndpoints.cloud?[{id:'cloud',title:'Moteur public NeuroCanvas',
+                  desc:'Service hébergé pour tous les utilisateurs'}]:[]),
+                {id:'custom',title:'Serveur institutionnel ou personnalisé',
+                  desc:'API Python HTTPS de votre laboratoire'}
+              ] as {id:'browser'|'local'|'cloud'|'custom';title:string;desc:string}[]).map(option=>
+                <label className={'preference-choice '+(engineTarget===option.id?'selected':'')} key={option.id}>
+                  <input type="radio" name="engine-target" checked={engineTarget===option.id}
+                    onChange={()=>setEngineTarget(option.id)}/>
+                  <span><strong>{option.title}</strong><small>{option.desc}</small></span>
+                </label>
+              )}
+            </div>
+            {engineTarget==='custom'&&<label className="engine-url-label">URL du moteur HTTPS
+              <input inputMode="url" placeholder="https://python.example.org" value={customEngineURL}
+                onChange={e=>setCustomEngineURL(e.target.value)}/></label>}
+            {engineTarget==='cloud'&&!engineEndpoints.cloud&&<p>Aucun moteur public configuré par l’hébergeur.</p>}
+            <p className="preferences-note">Un traitement sur serveur distant implique l’envoi de l’acquisition vers ce serveur. Ne transférez pas de données identifiantes ou sensibles sans autorisation et cadre de protection adéquat.</p>
+            <div className="engine-actions">
+              <button className="primary" disabled={checking||
+                (engineTarget==='custom'&&!customEngineURL.trim())}
+                onClick={()=>void ping()}>{checking?'Connexion…':'Connecter le moteur'}</button>
+              <span className={connected?'engine-on':'engine-off'}>
+                {connected?(engineHealth?.mode==='shared'?'Cloud connecté':'Python connecté'):
+                  'Navigateur uniquement'}</span>
+            </div>
+            {connected&&<p className="preferences-note">Serveur : {activeEngineURL} ·
+              MNE {engineHealth?.mne} · NeuroKit2 {engineHealth?.neurokit2}</p>}
           </div>
           <div className="preferences-group"><h3>Apparence</h3>
             <p>Thème visuel</p>
@@ -590,7 +673,7 @@ export default function App() {
       <header className="topbar">
         <div className="top-left"><button className="mobile-menu icon-button" onClick={() => setMenu(true)} aria-label="Menu"><Menu size={22} /></button>
           <span className="breadcrumbs">Workspace <span>/</span> {TABS.find(x => x.id === tab)?.title}</span></div>
-        <div className="top-right"><span className={'status-pill ' + (connected ? 'ready' : '')}>{connected ? 'PYTHON CONNECTED' : 'LOCAL BROWSER'}</span>
+        <div className="top-right"><span className={'status-pill ' + (connected ? 'ready' : '')}>{connected ? (engineHealth?.mode==='shared'?'PYTHON CLOUD':'PYTHON LOCAL') : 'BROWSER ONLY'}</span>
           <button className="outline small personalization-button" title="Ouvrir les préférences" aria-label="Personnalisation"
             onClick={() => setSettingsOpen(true)}><Settings2 size={16}/><span>Personnalisation</span><span className="language-mini">{locale.toUpperCase()}</span></button>
           <button className="primary small" onClick={() => fileInput.current?.click()}><FileUp size={15} /> Importer</button>

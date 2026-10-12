@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: neurocanvas-python-engine
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NEUROCANVAS_ENGINE_MODE
+        value: shared
+      - key: NEUROCANVAS_TOKEN_SECRET
+        generateValue: true
+      - key: NEUROCANVAS_ALLOWED_ORIGINS
+        value: https://lucper01.github.io
