@@ -252,6 +252,8 @@ export default function App() {
     setBusy(true)
     try {
       const primary = files.find(f => /\.(bdf|edf|vhdr|json|csv|tsv|fif|set|acq|zip)$/i.test(f.name)) || files[0]
+      const allowSharedTransfer = () => engineHealth?.mode !== 'shared' || window.confirm(
+        'L’acquisition sera transférée vers un serveur Python distant. Ne transférez que des données autorisées et conformes aux règles de confidentialité de votre établissement. Confirmer l’envoi ?')
       if (primary.name.toLowerCase().endsWith('.json') && files.length === 1) {
         const loaded = JSON.parse(await primary.text()) as LocalRecording
         if (!loaded.info || !Array.isArray(loaded.raw) || !loaded.raw.length || loaded.raw[0].length !== loaded.info.samples)
@@ -263,8 +265,7 @@ export default function App() {
       } else if (/\.(edf|bdf|vhdr)$/i.test(primary.name)) {
         let importedByPython = false
         if (connected && /\.(edf|bdf)$/i.test(primary.name) &&
-          (engineHealth?.mode!=='shared'||window.confirm(
-            'Cette acquisition sera envoyée vers un serveur externe. Confirmer le transfert ?'))) {
+          allowSharedTransfer()) {
           try {
             const parsed = await api.upload(primary)
             activate(parsed, parsed.session_id)
@@ -283,6 +284,7 @@ export default function App() {
           success('Fichier scientifique chargé localement. Vérifier unités, fréquence et avertissements.')
         }
       } else if (connected) {
+        if (!allowSharedTransfer()) throw Error('Transfert vers le serveur distant annulé.')
         const result = await api.upload(primary, fsInput ? Number(fsInput) : undefined)
         activate(result, result.session_id); success('Fichier analysé dans le moteur scientifique Python.')
       } else if (/\.(csv|tsv)$/i.test(primary.name)) {
