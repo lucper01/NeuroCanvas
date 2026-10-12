@@ -61,15 +61,20 @@ Configure a public HTTPS domain for the Railway service. Confirm that:
 
 ### Connect a public Python URL to GitHub Pages
 
-On the NeuroCanvas GitHub repository, create an **Actions repository variable**
-(not a secret) named `NEUROCANVAS_ENGINE_URL` containing the HTTPS service
-URL (for example `https://your-service.example.com`). The GitHub Pages
-workflow passes it to Vite as `VITE_NEUROCANVAS_ENGINE_URL`.
+**Recommended:** update `frontend/public/engine-config.json` so
+`engine_url` contains the HTTPS public endpoint URL (for example
+`"https://your-service.example.com"`). This is only the **public service
+address**; never store credentials, access tokens or signing secrets there.
+Commit the file, and let GitHub Pages publish the new runtime configuration.
 
-Then rerun the **NeuroCanvas PWA** workflow on `main`. Once it finishes,
-visitors can see **Public NeuroCanvas engine** in the settings and the
-application can obtain its own anonymous guest token. The URL is public
-by design; the signing secret remains exclusively on the server.
+**Alternative:** create an **Actions repository variable** named
+`NEUROCANVAS_ENGINE_URL` containing the HTTPS service URL. The GitHub
+Pages workflow builds it into the PWA as `VITE_NEUROCANVAS_ENGINE_URL`.
+This embedded value takes precedence over the runtime JSON.
+
+After publication, visitors can see **Public NeuroCanvas engine** in
+Personalization. NeuroCanvas uses the public address only for a health and
+guest handshake, never automatically uploads an acquisition.
 
 Without a configured public URL, the PWA still offers browser-only,
 local Python and custom institutional HTTPS modes.
