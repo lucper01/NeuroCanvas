@@ -4,8 +4,8 @@ This module converts event codes in acquisition channels and manually imported e
 
 ## Detection
 
-1. Import a recording containing a digital status/stim/trigger channel (e.g. BioSemi Status or STI 014).
-2. Open **Trigger & Epoch Studio**, select the raw trigger channel.
+1. Import an EDF, BDF or BrainVision file containing a digital status/stim/trigger channel (e.g. BioSemi Status or STI 014). The browser does not need Python for continuous EDF/BDF or supported BrainVision files. For BrainVision, select all three companion files together.
+2. Open **Trigger & Epoch Studio**, select the raw trigger channel. For BDF Status imports, the browser suggests the 16-bit **0xFFFF** mask by default; check the acquisition hardware specification before applying it.
 3. Choose an optional bit mask (8-bit `0xFF`, 16-bit `0xFFFF`, or 24-bit `0xFFFFFF`). Use this for status words containing extra non-trigger bits. Do not apply a mask without checking the hardware manual.
 4. Adjust **minimum pulse width**, **minimum interval**, and integer-code **tolerance**. The preview shows code counts, timestamps, and rejected pulses.
 5. Confirm only after visually checking the preview; confirmation adds event metadata while preserving raw samples.

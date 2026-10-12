@@ -229,7 +229,7 @@ export default function TriggerStudio({
   const [widthMs,setWidthMs]=useState(0)
   const [intervalMs,setIntervalMs]=useState(0)
   const [tolerance,setTolerance]=useState(.25)
-  const [bitMask,setBitMask]=useState('none')
+  const [bitMask,setBitMask]=useState(info.source==='bdf/browser'?'65535':'none')
   const [preview,setPreview]=useState<TriggerPreview|null>(null)
   const [busy,setBusy]=useState(false)
   const [definitions,setDefinitions]=useState<TriggerDefinition[]>(()=>(info.trigger_definitions||[]).map(d=>({...d})))

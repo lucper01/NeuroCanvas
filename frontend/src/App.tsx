@@ -13,6 +13,7 @@ import { loadPreferences, savePreferences, resolveLanguage, localizeTree } from 
 import type { Preferences } from './localization'
 import { demo, importCSV, applySteps, viewport, spectrum, spectrogram, erp, fourier } from './engine'
 import { api } from './api'
+import { importScientificFiles } from './browserFormats'
 import TriggerStudio from './TriggerStudio'
 import NeuroDashboard from './NeuroDashboard'
 import { VisualThemeContext } from './VisualThemeContext'
@@ -216,30 +217,54 @@ export default function App() {
       success('Démo Python ouverte. Tous les traitements avancés sont disponibles.')
     } catch (e) { error(e) } finally { setBusy(false) }
   }
-  const upload = async (file: File) => {
+  const upload = async (files: File[]) => {
+    if (!files.length) return
     setBusy(true)
     try {
-      if (file.name.toLowerCase().endsWith('.json')) {
-        const loaded = JSON.parse(await file.text()) as LocalRecording
+      const primary = files.find(f => /\.(bdf|edf|vhdr|json|csv|tsv|fif|set|acq|zip)$/i.test(f.name)) || files[0]
+      if (primary.name.toLowerCase().endsWith('.json') && files.length === 1) {
+        const loaded = JSON.parse(await primary.text()) as LocalRecording
         if (!loaded.info || !Array.isArray(loaded.raw) || !loaded.raw.length || loaded.raw[0].length !== loaded.info.samples)
           throw Error('Session JSON incompatible.')
         if (loaded.raw.flat().some(x => !Number.isFinite(x))) throw Error('La session contient des valeurs non finies.')
         if (loaded.info.samples * loaded.raw.length > 20_000_000) throw Error('Session trop volumineuse.')
         const restored = applySteps({ ...loaded, processed: loaded.raw.map(x => [...x]) }, loaded.info.history || [])
         activate(restored.info, null, restored); success('Session locale restaurée.')
+      } else if (/\.(edf|bdf|vhdr)$/i.test(primary.name)) {
+        let importedByPython = false
+        if (connected && /\.(edf|bdf)$/i.test(primary.name)) {
+          try {
+            const parsed = await api.upload(primary)
+            activate(parsed, parsed.session_id)
+            success('Fichier complet analysé par le moteur scientifique Python.')
+            importedByPython = true
+          } catch {
+            // The browser fallback is explicitly bounded and labels any truncation.
+          }
+        }
+        if (!importedByPython) {
+          const parsed = await importScientificFiles(files)
+          if (connected && /\.(edf|bdf)$/i.test(primary.name)) {
+            parsed.info.warnings.unshift('Le moteur Python n’a pas pu importer ce fichier : aperçu navigateur utilisé à la place.')
+          }
+          activate(parsed.info, null, parsed)
+          success('Fichier scientifique chargé localement. Vérifier unités, fréquence et avertissements.')
+        }
       } else if (connected) {
-        const result = await api.upload(file, fsInput ? Number(fsInput) : undefined)
+        const result = await api.upload(primary, fsInput ? Number(fsInput) : undefined)
         activate(result, result.session_id); success('Fichier analysé dans le moteur scientifique Python.')
-      } else if (/\.(csv|tsv)$/i.test(file.name)) {
-        const result = importCSV(await file.text(), file.name, fsInput ? Number(fsInput) : undefined)
+      } else if (/\.(csv|tsv)$/i.test(primary.name)) {
+        const result = importCSV(await primary.text(), primary.name, fsInput ? Number(fsInput) : undefined)
         activate(result.info, null, result); success('CSV chargé localement dans le navigateur.')
-      } else throw Error('Ce format nécessite le moteur Python. Lancez le backend pour utiliser BDF, EDF, FIF, BrainVision, SET ou ACQ.')
+      } else {
+        throw Error('Import local : EDF et BDF sont pris en charge, ainsi que BrainVision avec .vhdr + .eeg + .vmrk. FIF, SET et ACQ nécessitent le moteur Python. Les acquisitions volumineuses doivent être importées localement sous Python.')
+      }
       setTab('explorer')
     } catch (e) { error(e) } finally { setBusy(false) }
   }
   const onFile = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.currentTarget.files?.[0]
-    if (file) void upload(file)
+    const files = Array.from(e.currentTarget.files || [])
+    if (files.length) void upload(files)
     e.currentTarget.value = ''
   }
 
@@ -579,7 +604,7 @@ export default function App() {
         </div>
         {notice && <div role="status" className={'toast ' + notice.kind}><Info size={16}/><span>{notice.message}</span>
           <button onClick={() => setNotice(null)} aria-label="Fermer"><X size={15}/></button></div>}
-        <input type="file" ref={fileInput} hidden accept=".csv,.tsv,.edf,.bdf,.fif,.vhdr,.set,.acq,.zip,.json" onChange={onFile} />
+        <input type="file" ref={fileInput} hidden accept=".csv,.tsv,.edf,.bdf,.fif,.vhdr,.eeg,.vmrk,.set,.acq,.zip,.json" multiple onChange={onFile} />
         <input type="file" ref={sessionInput} hidden accept=".json" onChange={onFile} />
 
         {tab === 'overview' && <>
@@ -934,7 +959,7 @@ export default function App() {
             <button className="outline" onClick={() => void ping()}><RefreshCw size={15}/> Tester le moteur Python</button>
           </Panel>
           <Panel title="Formats, standards et limites">
-            <div className="help-grid"><div><h4>Formats pris en charge</h4><p>Mode web : CSV/TSV, session JSON. Mode Python : CSV, TSV, EDF, BDF, FIF, BrainVision VHDR, EEGLAB SET, ACQ avec bioread, et ZIP pour jeux de fichiers associés.</p></div>
+            <div className="help-grid"><div><h4>Formats pris en charge</h4><p>Mode navigateur hors ligne : CSV/TSV, JSON, EDF, BDF et BrainVision (.vhdr avec .eeg/.vmrk sélectionnés ensemble). EDF/BDF avec plusieurs fréquences ou discontinuités et fichiers volumineux nécessitent Python. FIF, EEGLAB SET, ACQ et ZIP sont disponibles via le moteur Python local.</p></div>
               <div><h4>Interopérabilité</h4><p>MNE-Python lit les formats d'électrophysiologie ; NeuroKit2 traite ECG, EDA, respiration, EMG, PPG et EOG ; SciPy exécute les traitements numériques.</p></div>
               <div><h4>Traçabilité</h4><p>Chaque transformation s'applique à une copie. Le pipeline est recalculé depuis les données brutes. Les métadonnées doivent conserver Fs et unités.</p></div>
               <div><h4>Limites scientifiques</h4><p>L'ERP simple ne rejette pas les artéfacts, les filtres web sont illustratifs, les sessions Python sont en mémoire et les mesures de NeuroKit2 demandent un contrôle de qualité.</p></div></div>
