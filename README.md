@@ -53,7 +53,7 @@ The browser reads the **original recorded file locally**, without uploading it t
 
 Import safeguards are intentional:
 
-- **Memory:** individual input files above 300 MiB are rejected in browser mode. At most 6 million channel × sample values are loaded; a larger recording is imported as a clearly marked **initial preview** with an explicit truncation warning. The original file is never edited.
+- **Memory:** EDF, BDF and BrainVision readers use file-range reads, so even large acquisition files need not be loaded entirely into RAM. At most **6 million channel × sample values** are decoded into the active browser session; longer files yield a clearly marked **initial preview** with an explicit truncation warning. The original file is never edited. The local Python service remains recommended when the complete acquisition is needed.
 - **Timing:** EDF+/BDF+ discontinuous segments and multiple channel sample rates are rejected instead of silently shifting time or resampling. Use MNE-Python for these cases.
 - **Scope:** raw FIF, EEGLAB SET, Biopac ACQ and ZIP bundles still require the local Python engine. Browser mode supports continuous EDF/BDF and the specified BrainVision binary variants only.
 - **Scientific quality:** verify original sample rate, hardware trigger latency, trigger codes, gain, units and annotations before interpreting results. Browser calculations are exploratory; use a validated pipeline for research publications.
