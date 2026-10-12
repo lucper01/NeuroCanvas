@@ -76,3 +76,60 @@ jobs:
         run: python -m pip install -r backend/requirements-dev.txt
       - name: Python test suite
         run: python -m pytest -q backend/tests
+
+  container:
+    name: Production container and shared API smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build non-root Python container
+        run: docker build -t neurocanvas-engine:test .
+      - name: Reject a missing shared token secret
+        shell: bash
+        run: |
+          id=$(docker run -d neurocanvas-engine:test)
+          sleep 4
+          if docker inspect --format '{{.State.Running}}' "$id" | grep -q true; then
+            docker logs "$id"
+            docker rm -f "$id"
+            echo "Shared service started without NEUROCANVAS_TOKEN_SECRET" >&2
+            exit 1
+          fi
+          docker rm "$id"
+      - name: Exercise HTTPS-ready shared guest API over localhost
+        shell: bash
+        run: |
+          docker run -d --name neurocanvas-smoke -p 127.0.0.1:8000:8000 \
+            -e NEUROCANVAS_ENGINE_MODE=shared \
+            -e NEUROCANVAS_TOKEN_SECRET="$(python -c 'import secrets;print(secrets.token_urlsafe(48))')" \
+            neurocanvas-engine:test
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/api/health -o /tmp/neurocanvas-health.json; then ready=1; break; fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then docker logs neurocanvas-smoke; exit 1; fi
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+          base="http://127.0.0.1:8000"
+          def request(path, method="GET", token=None):
+              headers={"Authorization":"Bearer "+token} if token else {}
+              req=urllib.request.Request(base+path,method=method,headers=headers)
+              try:
+                  with urllib.request.urlopen(req,timeout=15) as result:
+                      return result.status,json.load(result)
+              except urllib.error.HTTPError as ex:
+                  return ex.code,json.load(ex)
+          status, health=request("/api/health")
+          assert status==200 and health["mode"]=="shared" and health["auth"]=="guest",health
+          assert request("/api/demo","POST")[0]==401
+          status, guest=request("/api/access/guest","POST")
+          assert status==200 and guest.get("token"),guest
+          status, demo=request("/api/demo","POST",guest["token"])
+          assert status==200 and demo.get("session_id"),demo
+          print("Guest scoped shared engine: health, auth, demo OK")
+          PY
+      - name: Diagnostics on failed container test
+        if: failure()
+        run: docker logs neurocanvas-smoke || true
