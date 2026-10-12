@@ -12,7 +12,7 @@ import { qualityWindows, validateMarkedSegment } from './qc'
 import { loadPreferences, savePreferences, resolveLanguage, localizeTree } from './localization'
 import type { Preferences } from './localization'
 import { demo, importCSV, applySteps, viewport, spectrum, spectrogram, erp, fourier } from './engine'
-import { api, connectEngine, disconnectEngine, downloadFromEngine, engineEndpoints } from './api'
+import { api, connectEngine, disconnectEngine, downloadFromEngine, discoverHostedEngine, engineEndpoints } from './api'
 import type { EngineHealth } from './api'
 import { importScientificFiles } from './browserFormats'
 import TriggerStudio from './TriggerStudio'
@@ -223,10 +223,18 @@ export default function App() {
   // This action is initiated by explicit user interaction.
   },[engineTarget,customEngineURL,success,error])
   useEffect(()=>{
-    if(!engineEndpoints.cloud)return
-    void connectEngine(engineEndpoints.cloud).then(health=>{
-      setConnected(true);setEngineHealth(health);setActiveEngineURL(engineEndpoints.current)
-    }).catch(()=>{setConnected(false);setEngineHealth(null)})
+    let active=true
+    void discoverHostedEngine().then(url=>{
+      if(!active||!url)return
+      setEngineTarget(current=>current==='browser'?'cloud':current)
+      void connectEngine(url).then(health=>{
+        if(!active)return
+        setConnected(true);setEngineHealth(health);setActiveEngineURL(engineEndpoints.current)
+      }).catch(()=>{
+        if(active){setConnected(false);setEngineHealth(null)}
+      })
+    })
+    return()=>{active=false}
   },[])
 
   const activate = (newInfo: RecordingInfo, id: string | null, local?: LocalRecording) => {
