@@ -101,7 +101,7 @@ describe('Genuine in-browser electrophysiology formats',()=>{
   it('imports EDF+ TAL annotations with correct onset and labels',()=>{
     const rec=parseEDFBDF(makeEDF({annotations:true}),'test.edf')
     expect(rec.info.channels).toHaveLength(1)
-    expect(rec.info.events[0]).toMatchObject({time:.25,label:'Stim 11',source:'edf-annotation'})
+    expect(rec.info.events[0]).toMatchObject({time:.25,label:'Stim 11',code:11,source:'edf-annotation'})
   })
   it('rejects EDF discontinuities and mixed sampling rates instead of shifting event time',()=>{
     expect(()=>parseEDFBDF(makeEDF({discontinuous:true}),'test.edf')).toThrow(/discontinu/)
@@ -125,6 +125,28 @@ describe('Genuine in-browser electrophysiology formats',()=>{
     expect((await importScientificFiles(files)).info.events).toHaveLength(2)
     await expect(importScientificFiles(files.slice(0,2))).rejects.toThrow(/vmrk/)
     await expect(importScientificFiles(files.slice(0,1))).rejects.toThrow(/eeg/)
+  })
+  it('reads full EDF/BDF data using file slices and validates the sample metadata',async()=>{
+    const edf=new File([makeEDF()],'run.edf')
+    const rec=await importScientificFiles([edf])
+    expect(rec.info.samples).toBe(8)
+    expect(rec.raw[0][0]).toBeCloseTo(-100)
+    const bdf=new File([makeEDF({bdf:true})],'run.bdf')
+    const other=await importScientificFiles([bdf])
+    expect(other.raw[1][1]).toBe(0x12000b)
+    expect(other.info.warnings.join(' ')).toContain('0xFFFF')
+  })
+  it('supports BrainVision vectorized data orientation without channel mixing',()=>{
+    const {header,markers,b}=vision()
+    const matrix=new DataView(new ArrayBuffer(b.byteLength))
+    const source=new DataView(b)
+    const samples=b.byteLength/4
+    for(let ch=0;ch<2;ch++)for(let i=0;i<samples;i++)
+      matrix.setInt16((ch*samples+i)*2,source.getInt16((i*2+ch)*2,true),true)
+    const vecHeader=header.replace('DataOrientation=MULTIPLEXED','DataOrientation=VECTORIZED')
+    const loaded=parseBrainVision(vecHeader,matrix.buffer,markers,'run.vhdr')
+    expect(loaded.raw[0]).toEqual([10,20,30,40,50,60])
+    expect(loaded.raw[1]).toEqual([2,4,6,8,10,12])
   })
   it('never claims FIF or ACQ decoding support in browser mode',async()=>{
     await expect(importScientificFiles([new File(['test'],'raw.fif')])).rejects.toThrow(/Python/)
