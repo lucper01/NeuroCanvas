@@ -128,7 +128,7 @@ The repository includes a workflow at `.github/workflows/pages.yml`. Enable **Se
 
 https://lucper01.github.io/NeuroCanvas/
 
-GitHub Pages serves the **frontend only**, while the Python scientific engine can run locally or as a separately hosted HTTPS service. In **Personalization → Python Engine**, choose browser only, local, configured public cloud or a custom institutional HTTPS endpoint. The public URL is embedded through the optional GitHub Actions repository variable `NEUROCANVAS_ENGINE_URL`. **Configuring Railway and setting that repository variable are distinct from publishing the PWA itself.** Details: [Python Engine deployment](docs/PYTHON_ENGINE.md).
+GitHub Pages serves the **frontend only**, while the Python scientific engine can run locally or as a separately hosted HTTPS service. In **Personalization → Python Engine**, choose browser only, local, configured public cloud or a custom institutional HTTPS endpoint. The public URL can be configured via `frontend/public/engine-config.json` (runtime) or the optional GitHub Actions repository variable `NEUROCANVAS_ENGINE_URL` (build time). **Configuring Railway and setting that repository variable are distinct from publishing the PWA itself.** Details: [Python Engine deployment](docs/PYTHON_ENGINE.md).
 
 ## Processing and scientific validity
 
