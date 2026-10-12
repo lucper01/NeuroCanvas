@@ -680,7 +680,7 @@ export default function App() {
         </div>
       </header>
       <div className="workspace">
-        <div className="page-heading"><div className="eyebrow">NEUROSCIENCE WORKBENCH / V0.4</div>
+        <div className="page-heading"><div className="eyebrow">NEUROSCIENCE WORKBENCH / V0.5</div>
           <h1>{tab === 'overview' ? 'Your signal workspace' : TABS.find(x => x.id === tab)?.title}</h1>
           <p>{tab === 'overview' ? 'Explorer, comprendre et transformer des signaux biomédicaux dans un même environnement.'
             : TABS.find(x => x.id === tab)?.subtitle}</p>
