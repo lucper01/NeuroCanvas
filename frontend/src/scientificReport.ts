@@ -97,6 +97,12 @@ export function auditHTML(data:AuditData,locale:'fr'|'en'='fr'):string{
     '<section><h2>'+esc(tr('Événements','Events'))+'</h2>'+
       (labels.length?table([tr('Code / étiquette','Code / label'),tr('Effectif','Count')],labels):
         '<p>'+esc(tr('Aucun événement.','No event available.'))+'</p>')+'</section>',
+    '<section><h2>'+esc(tr('Dictionnaire de triggers et conditions','Trigger codebook & conditions'))+'</h2>'+
+      (info.trigger_definitions?.length?
+        table([tr('Code','Code'),tr('Signification','Meaning'),tr('Conditions','Conditions')],
+          info.trigger_definitions.map(x=>[x.code,x.meaning,x.conditions.join(', ')])):
+        '<p>'+esc(tr('Aucun dictionnaire de déclencheurs enregistré.',
+          'No trigger codebook stored.'))+'</p>')+'</section>',
     '<section><h2>'+esc(tr('Contrôle qualité par canal','Channel-level quality review'))+'</h2>'+
       (qc?'<p>'+esc(tr('Fenêtres','Windows'))+': '+num(qc.window_seconds,2)+' s. '+
         esc(qc.warning)+'</p>'+
@@ -110,7 +116,15 @@ export function auditHTML(data:AuditData,locale:'fr'|'en'='fr'):string{
       (info.bad_segments?.length?table([tr('Début (s)','Start (s)'),tr('Fin (s)','End (s)'),tr('Justification','Reason')],
         info.bad_segments.map(x=>[num(x.start),num(x.end),x.reason])):
         '<p>'+esc(tr('Aucun segment exclu.','No manually marked segment.'))+'</p>')+
-      '<p>'+esc(tr('Décisions d’essais','Trial decisions'))+': '+esc((info.trial_decisions||[]).length)+'</p></section>',
+      '<p>'+esc(tr('Décisions d’essais','Trial decisions'))+': '+esc((info.trial_decisions||[]).length)+'</p>'+
+      ((info.trial_decisions||[]).length?
+        table([tr('Identifiant événement','Event UID'),tr('Rejeté','Rejected'),tr('Justification','Reason')],
+          (info.trial_decisions||[]).slice(0,500).map(x=>[
+            x.event_uid,x.rejected?'YES':'NO',x.reason]))+
+        ((info.trial_decisions||[]).length>500?
+          '<p>'+esc(tr('Seules les 500 premières décisions figurent dans le rapport HTML ; le JSON conserve toutes les décisions.',
+            'Only the first 500 decisions are included in HTML; the JSON contains every decision.'))+'</p>':'')
+        :'')+'</section>',
     '<section><h2>'+esc(tr('Avertissements et limites','Warnings & limitations'))+'</h2>'+
       (warnings.length?'<ul>'+warnings.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<p>—</p>')+
       '<p><strong>'+esc(tr('Interprétation','Interpretation'))+':</strong> '+
