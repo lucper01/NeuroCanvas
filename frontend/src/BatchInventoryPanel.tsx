@@ -4,6 +4,35 @@ import { inventoryCSV,inventoryJSON,scanDatasetInventory } from './batchInventor
 import type { InventoryItem } from './batchInventory'
 import type { Language } from './localization'
 
+function warningText(warning:string,fr:boolean):string{
+  if(!fr)return warning
+  const translations:[string,string][]=[
+    ['Header-only CSV scan: sampling frequency, row count and total duration not inferred.',
+      'Lecture de l’en-tête CSV uniquement : fréquence, nombre de lignes et durée totale non estimés.'],
+    ['Discontinuous EDF+/BDF+: elapsed duration is unknown from this header; use MNE for accurate time axes.',
+      'EDF+/BDF+ discontinu : durée réelle non déterminable depuis cet en-tête. Utiliser MNE pour les horodatages.'],
+    ['Multiple channel rates: explicit resampling needed for browser analysis.',
+      'Fréquences différentes entre canaux : rééchantillonnage explicite nécessaire pour analyser dans le navigateur.'],
+    ['Trailing bytes not included in stated record count.',
+      'Octets supplémentaires après les enregistrements déclarés.'],
+    ['Companion file; select the matching .vhdr to inspect BrainVision metadata.',
+      'Fichier associé : sélectionner le .vhdr correspondant pour inspecter les métadonnées BrainVision.'],
+    ['MNE/bioread or local Python is required to inspect this format.',
+      'Ce format nécessite MNE/bioread ou le moteur Python local.'],
+    ['Companion EEG binary file missing:', 'Fichier binaire EEG associé manquant :'],
+    ['Referenced VMRK event file missing:', 'Fichier de marqueurs VMRK référencé manquant :'],
+    ['EEG binary byte length inconsistent with channel count.',
+      'Taille du fichier EEG incohérente avec le nombre de canaux.'],
+    ['Unsupported BrainVision binary format:', 'Format binaire BrainVision non pris en charge :']
+  ]
+  for(const [source,target] of translations)if(warning.startsWith(source))
+    return target+warning.slice(source.length)
+  return warning
+}
+const states={
+  fr:{readable:'Compatible',partial:'À vérifier',python:'Python requis',invalid:'Invalide'},
+  en:{readable:'Readable',partial:'Review',python:'Python needed',invalid:'Invalid'}
+}
 type Props={locale:Language;onOpen:(files:File[])=>void}
 function download(text:string,mime:string,name:string){
   const url=URL.createObjectURL(new Blob([text],{type:mime}))
@@ -93,14 +122,14 @@ export default function BatchInventoryPanel({locale,onOpen}:Props){
         </tr></thead><tbody>{rows.map(row=><tr key={row.index}>
           <td>{row.index+1}</td>
           <td><strong title={row.filename}>{row.filename}</strong>
-            {row.warnings.map((w,i)=><small className="batch-warning" key={i}>{w}</small>)}</td>
+            {row.warnings.map((w,i)=><small className="batch-warning" key={i}>{warningText(w,fr)}</small>)}</td>
           <td>{row.format}</td>
           <td>{(row.size_bytes/1024/1024).toFixed(2)} MB</td>
           <td>{row.channels??'—'}</td>
           <td>{row.sampling_hz?.toFixed(2)??'—'}</td>
           <td>{row.duration_s?.toFixed(2)??'—'}</td>
           <td>{row.has_event_channel===null?'—':row.has_event_channel?'✓':'—'}</td>
-          <td><span className={'batch-state batch-'+row.status}>{row.status}</span></td>
+          <td><span className={'batch-state batch-'+row.status}>{states[fr?'fr':'en'][row.status]}</span></td>
           <td><button className="outline"
             disabled={row.status==='invalid'||['VMRK','EEG'].includes(row.format)}
             onClick={()=>open(row)}><Search size={14}/>{fr?'Charger':'Load'}</button></td>
