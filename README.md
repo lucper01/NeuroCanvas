@@ -1,6 +1,6 @@
 # NeuroCanvas
 
-**NeuroCanvas** is an open-source, hybrid scientific workbench for exploring, transforming, visualizing and teaching neurophysiological and peripheral physiological signals. It combines an installable React/TypeScript progressive web app with an optional local Python processing service based on **MNE-Python**, **NeuroKit2** and **SciPy**.
+**NeuroCanvas** is an open-source, offline-first scientific workbench for exploring, transforming, visualizing and teaching neurophysiological and peripheral physiological signals. It combines an installable React/TypeScript progressive web app with an optional local Python processing service based on **MNE-Python**, **NeuroKit2** and **SciPy**.
 
 The project is general-purpose and independent of any single experiment or research programme.
 
@@ -9,18 +9,22 @@ The project is general-purpose and independent of any single experiment or resea
 | Module | Scope |
 | --- | --- |
 | Overview | Active recording, duration, sampling rate, channel count, recent signals and quick actions |
+| Batch Inventory | Inspect up to 150 EDF/BDF, BrainVision or CSV/TSV headers offline; review durations, channels, Fs, markers and companion files; export privacy-aware inventory CSV/JSON and open files for analysis |
 | Signal Explorer | Channel selection, synchronized temporal traces, zoom/scroll, event annotations and unprocessed/processed comparison |
 | Signal Processing | High/low/band-pass, notch, baseline mean removal, linear detrending, rectification, EEG average referencing and a non-destructive operation history |
 | Frequency Lab | Single-sided FFT amplitude spectrum, Welch PSD, spectrograms and numerical integration of canonical EEG frequency bands |
 | Neurophysiology Lab | Event-aligned averages with SEM; dedicated ECG, EDA, respiration, EMG, PPG and EOG signal processing using NeuroKit2 |
 | Advanced Analysis | Channel QC, magnitude-squared coherence, MNE multichannel PSD and epochs, 10–20 montage preview, exploratory ICA and NeuroKit2 HRV |
-| Artifact Review | Non-destructive manual bad-channel and bad-interval review, descriptive window metrics and optional rejection of marked epochs |
+| Artifact Review | Non-destructive bad-channel/interval review; multichannel temporal QC heatmap, explicit relative amplitude/flat flags, all-window CSV audit and optional exclusion of marked epochs |
 | Trigger & Epoch Studio | Detect integer-coded TTL/status pulses; define code meanings and pooled experimental conditions; extract epochs, inspect paginated trials, review individual trials with reasons, view condition-average waveforms and trial heatmaps, and export scientific measurements |
 | Internationalization | Automatic French/English interface by browser language, manual overrides and compact/standard display personalization |
 | Learning Studio | Seeded synthetic EEG, ECG, EDA, respiration, EMG and trigger-code demonstrations with adjustable oscillation frequency and signal noise |
-| Export & Reproducibility | Raw/processed CSV, provenance JSON, locally restorable browser sessions, trigger codebooks, portable analysis protocols (no signal samples), reviewed-trial logs, per-condition measurement CSV, epoch CSV/NPZ and PNG/SVG figures |
+| Export & Reproducibility | Raw/processed CSV, provenance JSON, locally restorable browser sessions, reusable and validated preprocessing recipe JSON, FR/EN self-contained printable HTML/JSON audit reports, trial decisions, condition measurements, trigger codebooks, epoch CSV/NPZ and PNG/SVG figures |
 
-**Browser mode** can open CSV/TSV, EDF, BioSemi BDF, BrainVision VHDR/EEG/VMRK companion files, and load/save local JSON sessions. It can generate demonstrations, identify coded trigger pulses, group trial events and run fast exploratory analysis without a server. **Python mode** enables additional file formats and specialized biomedical algorithms. Python analysis runs **on the user's own computer**, not on GitHub Pages.
+**Browser mode** can open CSV/TSV, EDF, BioSemi BDF, BrainVision VHDR/EEG/VMRK companion files, and load/save local JSON sessions.
+
+**No cloud engine is required** for the offline workflows described below. GitHub Pages only distributes the PWA; browser-based analyses execute on the user's device. MNE-Python and NeuroKit2 remain optional, locally installed alternatives for specialized scientific analyses and unsupported file formats. Shared hosting is not part of the default workflow.
+ It can generate demonstrations, identify coded trigger pulses, group trial events and run fast exploratory analysis without a server. **Python mode** enables additional file formats and specialized biomedical algorithms. Python analysis runs **on the user's own computer**, not on GitHub Pages.
 
 ## Visual interface
 
@@ -71,6 +75,17 @@ time_s,Fz,Cz,ECG
 For a quick trigger demonstration, open Learning Studio and load the synthetic recording: it includes a **TRIGGER TTL** channel with codes 11, 12, 21 and 22 and preconfigured Visual/Auditory conditions. In Trigger & Epoch Studio, preview and confirm pulses, modify condition groupings, compute epochs aligned to each trigger, examine single trials and trial heatmaps, and save a reusable analysis protocol that contains no raw signal samples. Do not infer hardware trigger timing from these synthetic signals.
 
 No automatic calibration or guessing of unit scaling is applied to generic CSV data. Assign sensor types and units explicitly, verifying that the **underlying numerical values already match the declared units**. EEG analyzed by MNE is internally represented in volts.
+
+## Extended offline scientific workflows
+
+NeuroCanvas 0.6 adds **Batch Inventory**, **multichannel QC matrix**, **Processing Recipe Studio** and **reproducible scientific audit exports**. These features are implemented in the browser, require no Railway account and do not upload acquisitions.
+
+- **Batch Inventory:** select multiple EDF/BDF/BrainVision/CSV/TSV files. Only metadata-bearing headers are scanned, avoiding full acquisition reads. EDF+/BDF+ discontinuity and mixed sample rates are signaled. The interface does not invent sampling rates for CSV. Results may be exported to CSV/JSON, with filenames redacted by default.
+- **All-channel artifact screening:** review relative high-amplitude periods, flat signal periods and previously marked intervals on a time-by-channel heatmap. Colors are screening aids, not diagnostic labels. Click the channel's Inspect control to navigate to a specific interval. CSV exports retain every window, even if the visualization aggregates adjacent bins.
+- **Processing recipes:** export or import pipelines using a versioned JSON schema. Imported recipes are previewed and never executed automatically. Unsupported methods, missing channels, invalid cutoff frequencies, Nyquist violations and attempts to filter trigger/status channels are explicitly rejected. Sampling and unit mismatches are disclosed.
+- **Scientific reports:** export a standalone, bilingual HTML report that can be printed to PDF using the browser, plus a structured JSON report. Reports contain metadata, channel units, processing steps, events, manually marked exclusions, descriptive multichannel QC counts and scientific limitations. They contain no raw or processed signal arrays, and source filenames are hidden by default. **Filename masking alone is not anonymization**: event labels, notes and metadata may still identify a recording.
+
+See [OFFLINE_WORKFLOWS.md](docs/OFFLINE_WORKFLOWS.md) for interpretation and reproducibility.
 
 ## Run the browser app
 
