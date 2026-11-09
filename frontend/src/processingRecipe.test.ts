@@ -40,6 +40,11 @@ describe('Reusable preprocessing recipes',()=>{
     recipe.channels.find(x=>x.name==='EEG Fz')!.unit='V'
     expect(inspectProcessingRecipe(recipe,r.info).warnings).toHaveLength(2)
   })
+  it('rejects a nonsensical or missing original sample rate',()=>{
+    const r=rec(),recipe=createProcessingRecipe(r.info)
+    recipe.sampling_rate_hz=0
+    expect(()=>inspectProcessingRecipe(recipe,r.info)).toThrow(/Invalid/)
+  })
   it('requires at least two EEG channels for average referencing',()=>{
     const r=rec(),recipe=createProcessingRecipe(r.info)
     recipe.steps=[{method:'average_reference',channels:['EEG Fz']}]
