@@ -49,6 +49,7 @@ describe('Header-only offline batch inventory',()=>{
     const files=[edf('discontinuous.edf',{discontinuous:true}),edf('mixed.edf',{mixed:true})]
     const rows=await scanDatasetInventory(files)
     expect(rows[0].status).toBe('partial')
+    expect(rows[0].duration_s).toBeNull()
     expect(rows[0].warnings.join()).toMatch(/Discontinuous/)
     expect(rows[1].sampling_hz).toBeNull()
     expect(rows[1].warnings.join()).toMatch(/Multiple channel rates/)
@@ -71,6 +72,12 @@ describe('Header-only offline batch inventory',()=>{
     expect(rows[0].sampling_hz).toBeNull()
     expect(rows[0].duration_s).toBeNull()
     expect(rows[1].status).toBe('python')
+  })
+  it('correctly counts quoted CSV column names containing separator characters',async()=>{
+    const data='time_s,"EEG, Fz",ECG\\n0,1,2'
+    const rows=await scanDatasetInventory([new File([data],'quoted.csv')])
+    expect(rows[0].channels).toBe(2)
+    expect(rows[0].status).toBe('partial')
   })
   it('redacts filenames by default and avoids spreadsheet formula injection',async()=>{
     const rows=await scanDatasetInventory([new File(['time_s,EEG\n0,1'],'=HYPERLINK.csv')])
