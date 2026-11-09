@@ -41,6 +41,11 @@ export function resolveLanguage(preference: LanguagePreference, browserLanguage?
  */
 const PAIRS: [string, string][] = [
   ['Personnalisation', 'Personalization'],
+  ['Batch Inventory','Dataset inventory'],
+  ['Inventaire multi-acquisitions hors ligne','Offline multirecording inventory'],
+  ['Matrice de qualité multicanal','Multichannel quality matrix'],
+  ['Rapport scientifique reproductible','Reproducible scientific report'],
+
   ["Processing Recipe Studio", "Processing Recipe Studio"],
   ["Exporter une séquence réutilisable sans signaux, ou importer et examiner une recette avant toute application.", "Export a reusable, sample-free processing sequence or import and review a recipe before applying it."],
   ["Nom du protocole", "Protocol name"],
