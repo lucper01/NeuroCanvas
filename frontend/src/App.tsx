@@ -876,6 +876,36 @@ export default function App() {
               <button className="primary" onClick={() => void addStep()}><Plus size={16}/> Ajouter une étape</button>
               <button className="outline" onClick={() => void restore()}><RotateCcw size={16}/> Restaurer</button>
             </div>
+            <div className="recipe-toolbar">
+              <div><h4>Processing Recipe Studio</h4>
+                <p>Exporter une séquence réutilisable sans signaux, ou importer et examiner une recette avant toute application.</p></div>
+              <div className="toolbar">
+                <label>Nom du protocole<input value={recipeTitle} maxLength={120}
+                  onChange={e=>setRecipeTitle(e.target.value)} placeholder="Processing workflow"/></label>
+                <button className="outline" onClick={exportRecipe}><Download size={15}/> Exporter recette JSON</button>
+                <button className="outline" onClick={()=>recipeInput.current?.click()}>
+                  <FileUp size={15}/> Importer recette</button>
+                <input hidden type="file" accept=".json,application/json" ref={recipeInput}
+                  onChange={e=>{const file=e.target.files?.[0];if(file)void importRecipe(file);e.target.value=''}}/>
+              </div>
+              {pendingRecipe&&<div className="recipe-preview" role="region" aria-label="Recette à vérifier">
+                <strong>Protocole à vérifier : {pendingRecipe.recipe.title}</strong>
+                <p>{pendingRecipe.steps.length} opération(s). Aucune modification des échantillons avant validation.</p>
+                {pendingRecipe.warnings.length>0&&<ul>{pendingRecipe.warnings.map((warning,i)=>
+                  <li key={i}>{warning}</li>)}</ul>}
+                <ol>{pendingRecipe.steps.map((step,i)=><li key={i}>
+                  {step.method} · {(step.channels||[]).join(', ')}
+                  {step.low!=null?' · HP '+step.low+' Hz':''}
+                  {step.high!=null?' · LP '+step.high+' Hz':''}
+                  {step.frequency!=null?' · '+step.frequency+' Hz':''}
+                </li>)}</ol>
+                <div className="button-row">
+                  <button className="primary" disabled={busy} onClick={()=>void applyImportedRecipe()}>
+                    Appliquer cette recette</button>
+                  <button className="outline" onClick={()=>setPendingRecipe(null)}>Annuler</button>
+                </div>
+              </div>}
+            </div>
             <p className="note">{remote ? 'Mode Python : filtres Butterworth SOS aller-retour (SciPy) pour les résultats scientifiques.'
               : 'Mode navigateur : filtres biquadratiques aller-retour à usage exploratoire ; utiliser Python pour valider les résultats.'}</p>
             <div className="steps">{steps.length ? steps.map((step,i) => <div key={i} className="step">
@@ -1055,6 +1085,10 @@ export default function App() {
               <p className="note">Aucun signal brut n'est écrasé. Les exclusions ne sont utilisées dans les ERP que sur demande.</p>
             </Panel>
           </div>
+          <QualityMatrixPanel report={qualityMatrix} locale={locale}
+            seconds={qcWindowSeconds} onSeconds={setQcWindowSeconds} busy={busy}
+            onAnalyze={()=>void scanAllQC()} onExport={exportAllQC}
+            onInspect={inspectQCCell}/>
           <Panel title="Segments annotés" description="Historique manuel et réversible">
             {badSegments.length ? badSegments.map((seg,i)=><div className="step" key={i}>
               <span className="step-index">{i+1}</span><div><strong>{format(seg.start,3)} – {format(seg.end,3)} s</strong>
@@ -1113,6 +1147,27 @@ export default function App() {
             <Panel title="Portable session" description="Session autonome du navigateur">
               <div className="export-icon"><Save size={28}/></div><p>Sauvegarder tous les signaux bruts, événements et traitements dans un JSON réimportable.</p>
               <button className="outline" disabled={!!remote} onClick={exportSession}><Save size={16}/> Sauvegarder session</button></Panel></div>
+          <Panel title="Rapport scientifique reproductible"
+            description="Générer un audit descriptif autonome, lisible hors ligne et imprimable">
+            <div className="audit-export-layout">
+              <div><strong>Acquisition, capteurs, événements, pipeline et contrôle qualité multicanal</strong>
+                <p>Le rapport documente les choix et mesures descriptives, sans intégrer les séries physiologiques.
+                  Il ne remplace pas une validation scientifique ni une évaluation de confidentialité institutionnelle.</p>
+                <label className="toggle"><input type="checkbox" checked={redactSourceName}
+                  onChange={e=>setRedactSourceName(e.target.checked)}/>
+                  Masquer le nom du fichier d'acquisition dans le rapport
+                </label>
+                <p className="note">Cette option ne garantit pas l'anonymat : les étiquettes d’événements,
+                  les métadonnées et les motifs de rejet doivent aussi être contrôlés.</p>
+              </div>
+              <div className="button-row">
+                <button className="primary" disabled={busy} onClick={()=>void generateAudit('html')}>
+                  <Download size={16}/> Rapport HTML imprimable</button>
+                <button className="outline" disabled={busy} onClick={()=>void generateAudit('json')}>
+                  <Download size={16}/> Audit structuré JSON</button>
+              </div>
+            </div>
+          </Panel>
           <Panel title="Contrôle des artéfacts" description="Décisions de revue manuelle">
             <div className="summary-list">
               <div><span>Canaux à exclure</span><strong>{badChannels.length}</strong></div>
