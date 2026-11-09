@@ -74,7 +74,7 @@ test.describe('Offline scientific workspaces',()=>{
         {name:'raw.fif',mimeType:'application/octet-stream',buffer:Buffer.from('test')}
       ])
       await expect(studio.locator('.batch-table tbody tr')).toHaveCount(2)
-      await expect(studio.getByText('Header-only CSV scan',{exact:false})).toBeVisible()
+      await expect(studio.getByText('Lecture de l’en-tête CSV uniquement',{exact:false})).toBeVisible()
       const download=page.waitForEvent('download')
       await studio.getByRole('button',{name:'CSV',exact:true}).click()
       expect((await download).suggestedFilename()).toBe('neurocanvas_dataset_inventory.csv')
