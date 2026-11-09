@@ -399,3 +399,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,
 .batch-empty .empty-state{padding:40px 15px}
 @media(max-width:580px){.batch-top-controls>.primary{width:100%}
 .batch-table{max-height:480px}.batch-table td>strong{max-width:220px}}
+
+
+/* Keep scientific navigation fully reachable on laptop-height screens. */
+.sidebar nav{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
+  overscroll-behavior:contain;padding-bottom:12px;
+  scrollbar-width:thin;scrollbar-color:#a5bbb2 transparent}
+.sidebar nav .nav-link{flex-shrink:0}
+.sidebar .side-bottom{margin-top:0;flex-shrink:0}
+.theme-dark .sidebar nav{scrollbar-color:#425578 transparent}
+@media(max-height:710px){
+  .sidebar .brand{padding-top:15px;padding-bottom:15px}
+  .sidebar .nav-heading{margin-top:7px;margin-bottom:7px}
+  .sidebar .side-bottom{padding-top:9px;padding-bottom:11px}
+}
