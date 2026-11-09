@@ -74,7 +74,7 @@ describe('Header-only offline batch inventory',()=>{
     expect(rows[1].status).toBe('python')
   })
   it('correctly counts quoted CSV column names containing separator characters',async()=>{
-    const data='time_s,"EEG, Fz",ECG\\n0,1,2'
+    const data=['time_s,"EEG, Fz",ECG','0,1,2'].join(String.fromCharCode(10))
     const rows=await scanDatasetInventory([new File([data],'quoted.csv')])
     expect(rows[0].channels).toBe(2)
     expect(rows[0].status).toBe('partial')
