@@ -170,6 +170,8 @@ export const api = {
       '/sessions/' + encoded(id) + '/neurokit/hrv?channel=' + encoded(channel)),
   qcWindows: (id: string, channel: string, windowSeconds: number) => call<import('./types').QCReport>(
     '/sessions/' + encoded(id) + '/qc/windows?channel=' + encoded(channel) + '&window_seconds=' + windowSeconds),
+  qcAllWindows: (id: string, windowSeconds: number) => call<import('./types').QCReport>(
+    '/sessions/' + encoded(id) + '/qc/windows?window_seconds=' + windowSeconds),
   qcMarkSegment: (id: string, start: number, end: number, reason: string) => call<RecordingInfo>(
     '/sessions/' + encoded(id) + '/qc/segments', { method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({start,end,reason}) }),

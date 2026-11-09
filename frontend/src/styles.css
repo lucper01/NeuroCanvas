@@ -307,3 +307,109 @@ button:focus-visible,input:focus-visible,select:focus-visible,
 .import-fs-label input{border-radius:8px;padding:9px 11px;width:100%;min-height:38px}
 .import-preferences>button{display:inline-flex;align-items:center;gap:8px}
 .theme-light .import-preferences{border-color:#e0e9e3}
+
+
+/* NeuroCanvas v0.6 · Offline Quality Matrix & reproducible report workspaces */
+.qc-matrix-panel { min-width:0; overflow:hidden; }
+.qc-matrix-panel .panel-heading { flex-wrap:wrap; }
+.qc-matrix-actions { display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin:12px 0 16px; }
+.qc-matrix-actions label { min-width:145px; }
+.qc-matrix-actions input { width:110px; }
+.qc-matrix-kpis {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}
+.qc-matrix-kpis>div{padding:13px 16px;border:1px solid #cfded6;border-radius:11px;background:#f4f9f7}
+.qc-matrix-kpis strong{display:block;color:#236958;font-size:21px;letter-spacing:-.5px}
+.qc-matrix-kpis small{font-size:11px;color:#6e847e;display:block;margin-top:5px}
+.theme-dark .qc-matrix-kpis>div{background:#1f2a3d;border-color:#3a4963}
+.theme-dark .qc-matrix-kpis strong{color:#a89df9}
+.theme-dark .qc-matrix-kpis small{color:#a1b3cf}
+.qc-matrix-plot{width:100%;min-height:290px;overflow:hidden;border:1px solid #cddbd8;border-radius:10px}
+.theme-dark .qc-matrix-plot{border-color:#374963}
+.qc-matrix-legend{display:flex;align-items:center;flex-wrap:wrap;gap:9px 18px;margin:14px 0;font-size:11px;color:inherit}
+.qc-matrix-legend span{display:flex;align-items:center;gap:6px}
+.qc-matrix-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.qc-status-ok{background:#27493f}.qc-status-flat{background:#a78d5d}
+.qc-status-high{background:#df9463}.qc-status-mark{background:#bd6486}
+.qc-matrix-table{overflow-x:auto;max-height:380px;overflow-y:auto}
+.qc-matrix-table table{min-width:660px}
+.qc-matrix-table th{position:sticky;top:0;z-index:2}
+.qc-matrix-table tr:hover td{background:rgba(116,143,202,.08)}
+.qc-matrix-table .outline{font-size:11px;min-height:28px;padding:4px 8px}
+.recipe-toolbar{margin:15px 0;padding:16px;border:1px solid #d3e2de;border-radius:13px;background:#f7faf9}
+.recipe-toolbar h4{margin:0 0 5px;font-size:14px}
+.recipe-toolbar>div>p{font-size:12px;line-height:1.5;margin:0 0 10px;color:#60766e}
+.recipe-toolbar input[type="text"],.recipe-toolbar input:not([type]){width:210px;max-width:100%}
+.recipe-toolbar .toolbar{display:flex;gap:9px;align-items:end;flex-wrap:wrap}
+.recipe-preview{margin-top:12px;padding:13px 16px;border:1px solid #7e91bd;border-radius:10px;background:#edf1fa}
+.recipe-preview p{font-size:12px;line-height:1.5}
+.recipe-preview ol,.recipe-preview ul{font-size:12px;padding-left:20px;max-height:180px;overflow:auto}
+.recipe-preview li{margin:4px 0}
+.theme-dark .recipe-toolbar{background:#1b2536;border-color:#394864}
+.theme-dark .recipe-toolbar h4,.theme-dark .recipe-preview strong{color:#edf1ff}
+.theme-dark .recipe-toolbar>div>p,.theme-dark .recipe-preview p{color:#a9bcd7}
+.theme-dark .recipe-preview{background:#252c44;border-color:#6977b3}
+.audit-export-layout{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center}
+.audit-export-layout>div:first-child>strong{display:block;font-size:13px;margin-bottom:10px}
+.audit-export-layout p{color:#627d74;font-size:12px;line-height:1.6}
+.audit-export-layout .toggle{display:flex;align-items:center;gap:8px;font-size:12px}
+.audit-export-layout .button-row{display:flex;gap:9px;flex-direction:column;align-items:stretch}
+.audit-export-layout .button-row>button{justify-content:center}
+.theme-dark .audit-export-layout p{color:#a5b6cf}
+.theme-dark .audit-export-layout .toggle{color:#d3deec}
+@media(max-width:850px){
+  .audit-export-layout{grid-template-columns:1fr}
+  .audit-export-layout .button-row{flex-direction:row;flex-wrap:wrap}
+  .qc-matrix-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:530px){
+  .qc-matrix-kpis{gap:7px}.qc-matrix-kpis>div{padding:10px}
+  .qc-matrix-kpis strong{font-size:17px}
+  .qc-matrix-actions button{width:100%;justify-content:center}
+  .audit-export-layout .button-row>button{width:100%}
+  .recipe-toolbar{padding:11px}.recipe-toolbar .toolbar button{width:100%}
+}
+
+
+/* Header-only Batch Inventory: dense but responsive research dataset review. */
+.batch-studio{display:flex;flex-direction:column;gap:16px}
+.batch-intro .panel-heading{flex-wrap:wrap}
+.batch-top-controls{display:flex;align-items:center;flex-wrap:wrap;gap:16px;margin-top:16px}
+.batch-top-controls>.toggle{display:flex;align-items:center;gap:8px}
+.batch-top-controls input[type=checkbox]{accent-color:#9385e4}
+.batch-notice{border:1px solid #6d9f96;border-radius:9px;padding:9px 12px;
+  background:#edf7f3;color:#346f66;margin-top:12px;font-size:12px;line-height:1.5}
+.theme-dark .batch-notice{background:#18383a;color:#98ded4;border-color:#366d6e}
+.batch-table{max-height:590px;overflow:auto}
+.batch-table table{min-width:980px}
+.batch-table th{position:sticky;top:0;z-index:2}
+.batch-table td{vertical-align:top;padding:12px 10px}
+.batch-table td>strong{display:block;overflow-wrap:anywhere;min-width:180px;max-width:360px}
+.batch-warning{display:block;margin-top:5px;font-size:10px;line-height:1.5;color:#8a604c}
+.theme-dark .batch-warning{color:#dab298}
+.batch-state{display:inline-flex;border-radius:20px;padding:4px 8px;font-size:10px;
+  border:1px solid transparent;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.batch-readable{background:#def3e9;color:#1f6246;border-color:#a2d9c0}
+.batch-partial{background:#fff3d5;color:#80601e;border-color:#dbc38c}
+.batch-python{background:#e9edfc;color:#4a5f95;border-color:#bac7e7}
+.batch-invalid{background:#fce1e3;color:#8f3a44;border-color:#dba6af}
+.theme-dark .batch-readable{background:#193b34;color:#a8ebd3;border-color:#315b4f}
+.theme-dark .batch-partial{background:#413a29;color:#edd5a4;border-color:#75613d}
+.theme-dark .batch-python{background:#273351;color:#b4c9f2;border-color:#4b5b82}
+.theme-dark .batch-invalid{background:#422c35;color:#efafb9;border-color:#75505b}
+.batch-table td>.outline{white-space:nowrap;padding:5px 9px;min-height:28px;font-size:11px}
+.batch-empty .empty-state{padding:40px 15px}
+@media(max-width:580px){.batch-top-controls>.primary{width:100%}
+.batch-table{max-height:480px}.batch-table td>strong{max-width:220px}}
+
+
+/* Keep scientific navigation fully reachable on laptop-height screens. */
+.sidebar nav{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
+  overscroll-behavior:contain;padding-bottom:12px;
+  scrollbar-width:thin;scrollbar-color:#a5bbb2 transparent}
+.sidebar nav .nav-link{flex-shrink:0}
+.sidebar .side-bottom{margin-top:0;flex-shrink:0}
+.theme-dark .sidebar nav{scrollbar-color:#425578 transparent}
+@media(max-height:710px){
+  .sidebar .brand{padding-top:15px;padding-bottom:15px}
+  .sidebar .nav-heading{margin-top:7px;margin-bottom:7px}
+  .sidebar .side-bottom{padding-top:9px;padding-bottom:11px}
+}
