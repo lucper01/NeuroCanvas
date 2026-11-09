@@ -3,7 +3,7 @@
 ## Principles
 
 NeuroCanvas is an **offline-first** scientific PWA. The following features do
-not upload acquisitions and require no Railway, cloud account or backend
+not upload acquisitions and require no cloud account, hosting service or backend
 service. Browser imports preserve original data, and analysis decisions never
 modify the source file. Optional **local** Python (MNE, NeuroKit2 and SciPy)
 remains available for advanced analyses and additional formats.
