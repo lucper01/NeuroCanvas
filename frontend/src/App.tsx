@@ -590,7 +590,9 @@ export default function App() {
         auditQuality(record,qcWindowSeconds)
       setQualityMatrix(report)
       const audit=buildAuditData(info,report,
-        remote?'Python / SciPy / MNE / NeuroKit2':'Offline browser / exploratory',
+        remote?('Python / MNE '+(engineHealth?.mne||'unknown')+
+          ' / NeuroKit2 '+(engineHealth?.neurokit2||'unknown')):
+          'Offline browser / exploratory',
         redactSourceName)
       if(type==='html')saveBlob(auditHTML(audit,locale),'text/html;charset=utf-8',
         'neurocanvas_scientific_audit.html')
@@ -1195,7 +1197,7 @@ export default function App() {
         {tab === 'help' && <>
           <Panel title="Getting started" description="NeuroCanvas combine exploration web et analyse scientifique locale">
             <div className="help-grid"><div><h4>1. Démarrer</h4><p>Ouvrir la démonstration, inventorier plusieurs EDF/BDF/BrainVision/CSV, ou importer une acquisition. Pour un CSV sans temps, renseigner la fréquence d'échantillonnage.</p></div>
-              <div><h4>2. Python facultatif</h4><p>La PWA fonctionne sans moteur externe. Pour les traitements MNE/NeuroKit2, démarrer Python localement puis sélectionner le moteur local dans Personnalisation. Aucun serveur Railway n'est nécessaire.</p></div>
+              <div><h4>2. Python facultatif</h4><p>La PWA fonctionne sans moteur externe. Pour les traitements MNE/NeuroKit2, démarrer Python localement puis sélectionner le moteur local dans Personnalisation. Aucun serveur distant n'est nécessaire.</p></div>
               <div><h4>3. Explorer</h4><p>Sélectionner les voies, parcourir l'enregistrement, ajouter des marqueurs, puis appliquer les traitements.</p></div>
               <div><h4>4. Documenter</h4><p>Exporter recettes JSON, contrôle qualité multicanal et rapport scientifique HTML/JSON. Conserver les acquisitions originales et vérifier toute métadonnée sensible.</p></div></div>
             <pre className="code-preview">{"cd backend\npython -m venv .venv\n# activer .venv selon votre système\npip install -r requirements.txt\nuvicorn main:app --host 127.0.0.1 --port 8000"}</pre>
