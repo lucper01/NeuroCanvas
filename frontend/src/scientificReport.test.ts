@@ -35,6 +35,18 @@ describe('Scientific report exports',()=>{
     expect(html).toContain('YES')
     expect(html).toContain('Aperçu tronqué')
   })
+  it('documents trigger codebook grouping and per-trial decisions in HTML',()=>{
+    const rec=demo()
+    rec.info.trial_decisions=[{
+      event_uid:'sample:250:11',rejected:true,reason:'Manual blink artifact'
+    }]
+    const html=auditHTML(buildAuditData(rec.info,auditQuality(rec),'browser'),'en')
+    expect(html).toContain('Trigger codebook &amp; conditions')
+    expect(html).toContain('Visual standard')
+    expect(html).toContain('Visual')
+    expect(html).toContain('Manual blink artifact')
+    expect(html).toContain('sample:250:11')
+  })
   it('includes reversible manual decisions without automatic classification',()=>{
     const r=demo()
     r.info.bad_channels=['EEG Cz']
