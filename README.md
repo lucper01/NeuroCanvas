@@ -78,7 +78,7 @@ No automatic calibration or guessing of unit scaling is applied to generic CSV d
 
 ## Extended offline scientific workflows
 
-NeuroCanvas 0.6 adds **Batch Inventory**, **multichannel QC matrix**, **Processing Recipe Studio** and **reproducible scientific audit exports**. These features are implemented in the browser, require no Railway account and do not upload acquisitions.
+NeuroCanvas 0.6 adds **Batch Inventory**, **multichannel QC matrix**, **Processing Recipe Studio** and **reproducible scientific audit exports**. These features are implemented in the browser, require no hosted Python service and do not upload acquisitions.
 
 - **Batch Inventory:** select multiple EDF/BDF/BrainVision/CSV/TSV files. Only metadata-bearing headers are scanned, avoiding full acquisition reads. EDF+/BDF+ discontinuity and mixed sample rates are signaled. The interface does not invent sampling rates for CSV. Results may be exported to CSV/JSON, with filenames redacted by default.
 - **All-channel artifact screening:** review relative high-amplitude periods, flat signal periods and previously marked intervals on a time-by-channel heatmap. Colors are screening aids, not diagnostic labels. Click the channel's Inspect control to navigate to a specific interval. CSV exports retain every window, even if the visualization aggregates adjacent bins.
