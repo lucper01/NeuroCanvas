@@ -3,13 +3,14 @@ import type { ChangeEvent, ReactNode } from 'react'
 import Plotly from 'plotly.js-dist-min'
 import {
   Activity, BrainCircuit, ChartNoAxesCombined, CircleHelp, ClipboardList,
-  Database, Download, FileDown, FileUp, Filter, FlaskConical, HeartPulse, Info,
+  Database, Download, FileDown, FileUp, Filter, FlaskConical, FolderOpen, HeartPulse, Info,
   Layers3, Menu, Monitor, Plus, RefreshCw, RotateCcw, Save, Settings2,
   ShieldCheck, SlidersHorizontal, Sparkles, Trash2, Wifi, WifiOff, X
 } from 'lucide-react'
 import type { Evoked, LocalRecording, QCReport, RecordingInfo, Spectrum, Step, TimeFrequency, Trace } from './types'
 import { qualityWindows, validateMarkedSegment } from './qc'
 import QualityMatrixPanel from './QualityMatrixPanel'
+import BatchInventoryPanel from './BatchInventoryPanel'
 import { auditQuality, qualityCSV } from './qualityMatrix'
 import { createProcessingRecipe, inspectProcessingRecipe } from './processingRecipe'
 import type { ProcessingRecipe } from './processingRecipe'
@@ -24,10 +25,11 @@ import TriggerStudio from './TriggerStudio'
 import NeuroDashboard from './NeuroDashboard'
 import { VisualThemeContext } from './VisualThemeContext'
 
-type Section = 'overview' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'advanced' | 'artifact' | 'triggers' | 'learning' | 'export' | 'help'
+type Section = 'overview' | 'batch' | 'explorer' | 'processing' | 'frequency' | 'physiology' | 'advanced' | 'artifact' | 'triggers' | 'learning' | 'export' | 'help'
 const TABS: { id: Section; title: string; subtitle: string; icon: typeof Activity }[] = [
   { id: 'overview', title: 'Overview', subtitle: 'Tableau de bord', icon: Layers3 },
   { id: 'explorer', title: 'Signal Explorer', subtitle: 'Exploration temporelle', icon: Activity },
+  { id: 'batch', title: 'Batch Inventory', subtitle: 'Inventaire multi-acquisitions hors ligne', icon: FolderOpen },
   { id: 'processing', title: 'Signal Processing', subtitle: 'Pipeline non destructif', icon: SlidersHorizontal },
   { id: 'frequency', title: 'Frequency Lab', subtitle: 'Spectres & temps-fréquence', icon: ChartNoAxesCombined },
   { id: 'physiology', title: 'Neurophysiology', subtitle: 'ERP & biosignaux', icon: HeartPulse },
@@ -862,6 +864,9 @@ export default function App() {
             <div className="event-chips">{events.slice(0,100).map((ev,i) => <span key={i}>{format(ev.time,2)} s · {ev.label}</span>)}{!events.length && <small>Aucun événement.</small>}</div>
           </Panel>
         </>}
+
+        {tab === 'batch' && <BatchInventoryPanel locale={locale}
+          onOpen={files=>{void upload(files)}}/>}
 
         {tab === 'processing' && <div className="columns-main">
           <Panel title="Processing pipeline" description="Traitements successifs, entièrement recalculés depuis le signal brut">
