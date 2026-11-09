@@ -193,6 +193,11 @@ function quote(v:string|number|null):string{
   if(/^[=+\-@\t\r]/.test(value))value="'"+value
   return /[",\r\n]/.test(value)?'"'+value.replace(/"/g,'""')+'"':value
 }
+function safeWarnings(row:InventoryItem,redactNames:boolean):string[]{
+  if(!redactNames)return [...row.warnings]
+  return row.warnings.map(w=>
+    w.replace(/(missing:\s*)([^\s|]+)/gi,'$1[redacted]'))
+}
 export function inventoryCSV(rows:InventoryItem[],redactNames=true):string{
   const result=['file,format,size_bytes,channels,sampling_hz,duration_s,samples_per_channel,event_marker,status,companion_files,warnings']
   for(const row of rows){
@@ -200,7 +205,7 @@ export function inventoryCSV(rows:InventoryItem[],redactNames=true):string{
       row.channels,row.sampling_hz,row.duration_s,row.samples_per_channel,
       row.has_event_channel===null?'unknown':String(row.has_event_channel),
       row.status,redactNames?String(row.companion_files.length):row.companion_files.join('; '),
-      row.warnings.join(' | ')]
+      safeWarnings(row,redactNames).join(' | ')]
     result.push(fields.map(v=>quote(v as string|number|null)).join(','))
   }
   return result.join('\r\n')
@@ -209,7 +214,8 @@ export function inventoryJSON(rows:InventoryItem[],redactNames=true):string{
   return JSON.stringify({
     schema:'neurocanvas.dataset-inventory.v1',created_at:new Date().toISOString(),
     files:rows.map(row=>({...row,filename:redactNames?'file_'+(row.index+1):row.filename,
-      companion_files:redactNames?[]:row.companion_files})),
+      companion_files:redactNames?[]:row.companion_files,
+      warnings:safeWarnings(row,redactNames)})),
     note:'Header-only metadata inventory; no physiological samples read or exported.'
   },null,2)
 }
