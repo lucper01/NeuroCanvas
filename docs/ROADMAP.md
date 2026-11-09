@@ -17,13 +17,17 @@ This list distinguishes the existing code from **future scope**. Nothing in this
 - Per-trial reversible rejection decisions with justification, optionally respected by condition-locked epochs.
 - Paged trials, event-aligned heatmaps, signed area and peak measurements, condition-level CSV and a validated reusable JSON analysis protocol.
 - Basic simulation-based unit tests.
+- Offline batch metadata inventory across EDF/BDF/BrainVision/CSV without loading raw signal arrays.
+- All-channel temporal quality heatmap, per-channel flags and full QC window CSV.
+- Portable preprocessing recipes with explicit confirmation, channel-type safeguards and Nyquist validation.
+- Self-contained FR/EN HTML research audit reports and structured, sample-free JSON.
 
 ## Priority next (not yet implemented)
 
 1. Regression tests against fixed known-good MNE, SciPy and NeuroKit2 outputs; continuous frontend browser tests.
-2. Electron/Tauri optional desktop distribution, with installation and environment bootstrap.
+2. Optional Tauri desktop distribution for the offline-first PWA, with clear local-only permissions and automatic updates.
 3. True chunked/streaming and disk-backed handling of very large BDF/EDF/FIF datasets.
-4. Per-modality setup wizard for correct input units, orientation, channel types, sampling and sensor calibration.
+4. Per-modality acquisition setup wizard with explicit sensor-unit conversion, orientation and calibration validation.
 5. Large-scale disk-backed trial annotations and shared collaborative reviewer agreements (rather than current local, single-user review).
 6. EEG reference/interpolation workflows and sensor-space topographic maps with measured montage coordinates.
 7. Rich ICA component visualization, user decisions and annotated reports.
