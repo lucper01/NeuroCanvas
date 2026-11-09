@@ -59,6 +59,7 @@ export function inspectProcessingRecipe(value:unknown,recording:RecordingInfo):{
   if(!record(value)||value.schema!=='neurocanvas.processing-recipe.v1'||
     typeof value.title!=='string'||!value.title.trim()||value.title.length>120||
     typeof value.created_at!=='string'||!finite(value.sampling_rate_hz)||
+    value.sampling_rate_hz<=0||
     !Array.isArray(value.channels)||!Array.isArray(value.steps)||value.steps.length>30)
     throw Error('Invalid or incompatible NeuroCanvas recipe.')
   const channels=value.channels
