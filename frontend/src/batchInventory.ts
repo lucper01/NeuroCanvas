@@ -70,7 +70,10 @@ async function edfHeader(file:File,index:number):Promise<InventoryItem>{
     labels.some(name=>/^(EDF|BDF)\s+Annotations/i.test(name))
   const reserved=decode(first,192,44)
   const discontinuous=/(EDF|BDF)\+D/i.test(reserved)
-  if(discontinuous)result.warnings.push('Discontinuous EDF+/BDF+: use MNE for accurate time axes.')
+  if(discontinuous){
+    result.duration_s=null
+    result.warnings.push('Discontinuous EDF+/BDF+: elapsed duration is unknown from this header; use MNE for accurate time axes.')
+  }
   if(multipleRates)result.warnings.push('Multiple channel rates: explicit resampling needed for browser analysis.')
   if(file.size-head>total*blockBytes)result.warnings.push('Trailing bytes not included in stated record count.')
   result.status=discontinuous||multipleRates?'partial':'readable'
@@ -124,14 +127,29 @@ async function brainVisionHeader(file:File,index:number,files:File[]):Promise<In
   result.status=result.warnings.length?'partial':'readable'
   return result
 }
+function parseCSVHeader(line:string,separator:string):string[]{
+  const values:string[]=[]
+  let token='',quoted=false
+  for(let i=0;i<line.length;i++){
+    const ch=line[i]
+    if(ch==='"'){
+      if(quoted&&line[i+1]==='"'){token+='"';i++}
+      else quoted=!quoted
+    }else if(ch===separator&&!quoted){values.push(token.trim());token=''}
+    else token+=ch
+  }
+  if(quoted)throw Error('Unterminated quoted CSV header.')
+  values.push(token.trim())
+  return values
+}
 async function csvHeader(file:File,index:number):Promise<InventoryItem>{
   const result=summaryItem(index,file)
   const text=await asText(file,128*1024)
   const line=text.replace(/^\uFEFF/,'').split(/\r?\n/)[0]||''
   if(!line)throw Error('Empty CSV/TSV header.')
   const separator=ext(file.name)==='tsv'?'\t':[';',',','\t']
-    .sort((a,b)=>line.split(b).length-line.split(a).length)[0]
-  const fields=line.split(separator).map(x=>x.trim())
+    .sort((a,b)=>parseCSVHeader(line,b).length-parseCSVHeader(line,a).length)[0]
+  const fields=parseCSVHeader(line,separator)
   const timeColumn=fields.some(x=>/^(time|time_s|seconds|timestamp_s|time \(s\)|t)$/i.test(x))
   result.channels=Math.max(0,fields.length-(timeColumn?1:0))
   if(result.channels===0)throw Error('No signal columns in header.')
