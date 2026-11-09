@@ -1194,10 +1194,10 @@ export default function App() {
 
         {tab === 'help' && <>
           <Panel title="Getting started" description="NeuroCanvas combine exploration web et analyse scientifique locale">
-            <div className="help-grid"><div><h4>1. Démarrer</h4><p>Ouvrir la démonstration, ou importer un fichier CSV/TSV. En l'absence de colonne temporelle, saisir la fréquence d'échantillonnage.</p></div>
-              <div><h4>2. Connecter Python</h4><p>Installer les dépendances Python puis lancer uvicorn sur 127.0.0.1:8000. L'interface détecte automatiquement la disponibilité du moteur.</p></div>
+            <div className="help-grid"><div><h4>1. Démarrer</h4><p>Ouvrir la démonstration, inventorier plusieurs EDF/BDF/BrainVision/CSV, ou importer une acquisition. Pour un CSV sans temps, renseigner la fréquence d'échantillonnage.</p></div>
+              <div><h4>2. Python facultatif</h4><p>La PWA fonctionne sans moteur externe. Pour les traitements MNE/NeuroKit2, démarrer Python localement puis sélectionner le moteur local dans Personnalisation. Aucun serveur Railway n'est nécessaire.</p></div>
               <div><h4>3. Explorer</h4><p>Sélectionner les voies, parcourir l'enregistrement, ajouter des marqueurs, puis appliquer les traitements.</p></div>
-              <div><h4>4. Documenter</h4><p>Exporter les données transformées et la provenance. Conserver séparément les acquisitions originales.</p></div></div>
+              <div><h4>4. Documenter</h4><p>Exporter recettes JSON, contrôle qualité multicanal et rapport scientifique HTML/JSON. Conserver les acquisitions originales et vérifier toute métadonnée sensible.</p></div></div>
             <pre className="code-preview">{"cd backend\npython -m venv .venv\n# activer .venv selon votre système\npip install -r requirements.txt\nuvicorn main:app --host 127.0.0.1 --port 8000"}</pre>
             <button className="outline" onClick={() => void ping()}><RefreshCw size={15}/> Tester le moteur Python</button>
           </Panel>
@@ -1210,7 +1210,10 @@ export default function App() {
         </>}
 
         <footer className="footer"><span>NeuroCanvas © 2026 · Open-source scientific toolkit</span>
-          <span>{remote ? 'SCIENTIFIC PYTHON ENGINE' : 'LOCAL EDUCATIONAL MODE'} · Data remain on your device</span></footer>
+          <span>{remote ? (engineHealth?.mode==='shared'?
+            'REMOTE PYTHON ENGINE · Recording transferred to the selected server':
+            'LOCAL PYTHON ENGINE · Data processed on this computer') :
+            'OFFLINE BROWSER · Data remain on this device'}</span></footer>
       </div>
     </main>
     {busy && <div className="working" role="status"><RefreshCw className="spin" size={21}/> Traitement en cours…</div>}
