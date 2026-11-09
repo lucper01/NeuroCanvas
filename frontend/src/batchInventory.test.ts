@@ -87,6 +87,16 @@ describe('Header-only offline batch inventory',()=>{
     expect(inventoryCSV(rows,false)).toContain("'=HYPERLINK.csv")
     expect(inventoryJSON(rows,false)).toContain('=HYPERLINK.csv')
   })
+  it('redacts identifiers hidden inside missing companion-file warnings',async()=>{
+    const rows=await scanDatasetInventory([bv()[0]])
+    const csv=inventoryCSV(rows)
+    const json=inventoryJSON(rows)
+    expect(csv).not.toContain('record.eeg')
+    expect(csv).not.toContain('record.vmrk')
+    expect(json).not.toContain('record.eeg')
+    expect(json).not.toContain('record.vmrk')
+    expect(inventoryCSV(rows,false)).toContain('record.eeg')
+  })
   it('bounds number of datasets for responsive local screening',async()=>{
     await expect(scanDatasetInventory([])).rejects.toThrow()
     await expect(scanDatasetInventory(Array.from({length:151},()=>new File(['a'],'a.fif'))))
