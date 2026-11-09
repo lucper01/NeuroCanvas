@@ -9,6 +9,11 @@ import {
 } from 'lucide-react'
 import type { Evoked, LocalRecording, QCReport, RecordingInfo, Spectrum, Step, TimeFrequency, Trace } from './types'
 import { qualityWindows, validateMarkedSegment } from './qc'
+import QualityMatrixPanel from './QualityMatrixPanel'
+import { auditQuality, qualityCSV } from './qualityMatrix'
+import { createProcessingRecipe, inspectProcessingRecipe } from './processingRecipe'
+import type { ProcessingRecipe } from './processingRecipe'
+import { auditHTML, auditJSON, buildAuditData } from './scientificReport'
 import { loadPreferences, savePreferences, resolveLanguage, localizeTree } from './localization'
 import type { Preferences } from './localization'
 import { demo, importCSV, applySteps, viewport, spectrum, spectrogram, erp, fourier } from './engine'
@@ -169,6 +174,13 @@ export default function App() {
   const [browserLanguage, setBrowserLanguage] = useState(() => typeof navigator !== 'undefined' ? navigator.language : 'en')
   const locale = resolveLanguage(preferences.language, browserLanguage)
   const [qcReport, setQcReport] = useState<QCReport | null>(null)
+  const [qualityMatrix, setQualityMatrix] = useState<QCReport|null>(null)
+  const [pendingRecipe, setPendingRecipe] = useState<{
+    recipe:ProcessingRecipe;steps:Step[];warnings:string[]
+  }|null>(null)
+  const [recipeTitle, setRecipeTitle] = useState('My processing workflow')
+  const [redactSourceName, setRedactSourceName] = useState(true)
+  const recipeInput = useRef<HTMLInputElement>(null)
   const [qcWindowSeconds, setQcWindowSeconds] = useState(2)
   const [qcStart, setQcStart] = useState(4)
   const [qcEnd, setQcEnd] = useState(5)
@@ -246,7 +258,7 @@ export default function App() {
     setChannel(newInfo.channels[0]?.name || '')
     setStart(0); setDuration(Math.min(10, newInfo.duration || 10))
     setEventLabel(newInfo.events[0]?.label || 'stimulus')
-    setQcReport(null); setExcludeMarked(false); setTraces([]); setRawTraces([]); setPsd(null); setFftData(null); setTfr(null); setEvoked(null); setPhysio(null); setAdvancedOutput(null)
+    setQcReport(null); setQualityMatrix(null); setPendingRecipe(null);setExcludeMarked(false); setTraces([]); setRawTraces([]); setPsd(null); setFftData(null); setTfr(null); setEvoked(null); setPhysio(null); setAdvancedOutput(null)
   }
   const loadDemo = () => { const rec = demo(demoRate, 40, alpha, noise, demoTone); activate(rec.info, null, rec); success('Démonstration synthétique chargée.') }
   const loadPythonDemo = async () => {
@@ -400,6 +412,29 @@ export default function App() {
     } catch (e) { error(e) }
   }
 
+  const scanAllQC=async()=>{
+    setBusy(true)
+    try{
+      const result=remote?await api.qcAllWindows(remote,qcWindowSeconds):
+        auditQuality(record,qcWindowSeconds)
+      setQualityMatrix(result)
+      success(locale==='fr'?'Matrice multicanal calculée sans exclure de données.':
+        'Multichannel quality matrix calculated without excluding samples.')
+    }catch(e){error(e)}finally{setBusy(false)}
+  }
+  const exportAllQC=()=>{
+    if(!qualityMatrix){error('Compute the channel quality matrix before exporting.');return}
+    saveBlob(qualityCSV(qualityMatrix),'text/csv;charset=utf-8','neurocanvas_all_channels_qc.csv')
+  }
+  const inspectQCCell=(name:string,at:number,to:number)=>{
+    const target=qualityMatrix?.channel_results.find(c=>c.name===name)
+    setChannel(name)
+    setQcReport(target&&qualityMatrix?{...qualityMatrix,channel_results:[target]}:null)
+    setQcStart(at);setQcEnd(Math.min(to,info?.duration||to))
+    setStart(at);setDuration(Math.max(.1,to-at))
+    success(locale==='fr'?'Canal sélectionné : examiner le détail ci-dessus.':
+      'Channel selected: inspect the details above.')
+  }
   const scanQC = async () => {
     setBusy(true)
     try {
@@ -416,7 +451,7 @@ export default function App() {
       if (remote) setRemoteInfo(await api.qcMarkSegment(remote, mark.start, mark.end, mark.reason))
       else setRecord(old => ({ ...old, info: { ...old.info, bad_segments:
         [...(old.info.bad_segments || []), mark].sort((a,b) => a.start-b.start) } }))
-      setQcReport(null)
+      setQcReport(null);setQualityMatrix(null)
       success('Segment marqué. Les signaux d’origine ne sont pas modifiés.')
     } catch (e) { error(e) }
   }
@@ -425,7 +460,7 @@ export default function App() {
       if (remote) setRemoteInfo(await api.qcRemoveSegment(remote, index))
       else setRecord(old => ({ ...old, info: { ...old.info, bad_segments:
         (old.info.bad_segments || []).filter((_,i) => i !== index) } }))
-      setQcReport(null)
+      setQcReport(null);setQualityMatrix(null)
       success('Marquage supprimé.')
     } catch (e) { error(e) }
   }
@@ -436,17 +471,21 @@ export default function App() {
       else setRecord(old => ({ ...old, info: { ...old.info, bad_channels:
         marked ? [...(old.info.bad_channels || []), name] :
           (old.info.bad_channels || []).filter(x => x !== name) } }))
-      setQcReport(null)
+      setQcReport(null);setQualityMatrix(null)
       success(marked ? 'Canal signalé pour exclusion manuelle.' : 'Canal réhabilité.')
     } catch (e) { error(e) }
   }
   const exportQC = () => saveBlob(JSON.stringify({
-    application:'NeuroCanvas', version:'0.2.0', recording: selectedLabel, sfreq,
+    application:'NeuroCanvas', version:'0.6.0', recording: selectedLabel, sfreq,
     exported_at:new Date().toISOString(), bad_channels:badChannels, bad_segments:badSegments,
     screening:qcReport, warning:'Marquages manuels, sans suppression des données brutes.'
   },null,2),'application/json','neurocanvas_artifact_review.json')
   const addStep = async () => {
     if (!selection.length) { error('Sélectionner au moins un canal avant d’appliquer un traitement.'); return }
+    if(selection.some(name=>channels.find(c=>c.name===name)?.type==='stim')){
+      error('Les canaux de triggers (stim) ne doivent pas être filtrés. Désélectionnez-les avant le traitement.')
+      return
+    }
     const newStep: Step = { method: stepType, channels: [...selection] }
     if (stepType === 'filter') {
       newStep.low = low.trim() ? Number(low) : null
@@ -455,8 +494,12 @@ export default function App() {
     if (stepType === 'notch') { newStep.frequency = Number(notch); newStep.quality = 30 }
     const nextSteps = [...steps, newStep]
     try {
+      if(!info)throw Error('Aucune acquisition active.')
+      inspectProcessingRecipe({...createProcessingRecipe({...info,history:[]}),
+        steps:nextSteps},info)
       if (remote) setRemoteInfo(await api.pipeline(remote, nextSteps))
       else setRecord(applySteps(record, nextSteps))
+      setQcReport(null);setQualityMatrix(null)
       success('Traitement ajouté au pipeline ; signal brut conservé.')
     } catch (e) { error(e) }
   }
@@ -464,6 +507,7 @@ export default function App() {
     try {
       if (remote) setRemoteInfo(await api.pipeline(remote, []))
       else setRecord(applySteps(record, []))
+      setQcReport(null);setQualityMatrix(null)
       success('Pipeline réinitialisé ; données brutes préservées.')
     } catch (e) { error(e) }
   }
@@ -472,6 +516,7 @@ export default function App() {
     try {
       if (remote) setRemoteInfo(await api.pipeline(remote, updated))
       else setRecord(applySteps(record, updated))
+      setQcReport(null);setQualityMatrix(null)
     } catch (e) { error(e) }
   }
   const addMarker = async () => {
@@ -484,7 +529,7 @@ export default function App() {
       success('Événement enregistré.')
     } catch (e) { error(e) }
   }
-  const exportMeta = () => saveBlob(JSON.stringify({ application: 'NeuroCanvas', version: '0.4.0', created_at: new Date().toISOString(),
+  const exportMeta = () => saveBlob(JSON.stringify({ application: 'NeuroCanvas', version: '0.6.0', created_at: new Date().toISOString(),
     info, method: remote ? 'Python/SciPy/MNE/NeuroKit2' : 'JavaScript / educational preview',
     signal_units: info?.channels.map(c => ({ name: c.name, unit: c.unit, type: c.type })) }, null, 2), 'application/json', 'neurocanvas_provenance.json')
   const exportCSV = (raw = false) => {
@@ -497,6 +542,61 @@ export default function App() {
       output.push(row.map(csvValue).join(','))
     }
     saveBlob(output.join('\n'), 'text/csv;charset=utf-8', raw ? 'neurocanvas_raw.csv' : 'neurocanvas_processed.csv')
+  }
+  const exportRecipe=()=>{
+    try{
+      if(!info)throw Error('Load a recording before exporting.')
+      const recipe=createProcessingRecipe(info,recipeTitle)
+      saveBlob(JSON.stringify(recipe,null,2),'application/json',
+        'neurocanvas_processing_recipe.json')
+      success(locale==='fr'?'Protocole exporté (sans données physiologiques).':
+        'Processing recipe exported (no physiological samples).')
+    }catch(e){error(e)}
+  }
+  const importRecipe=async(file:File)=>{
+    try{
+      if(!info)throw Error('Load a recording before importing a recipe.')
+      if(file.size>128*1024)throw Error('Recipe file is larger than 128 KiB.')
+      const parsed=inspectProcessingRecipe(JSON.parse(await file.text()) as unknown,info)
+      setPendingRecipe(parsed)
+      success(locale==='fr'?'Protocole chargé : vérifier avant application.':
+        'Recipe loaded: review before applying.')
+    }catch(e){setPendingRecipe(null);error(e)}
+  }
+  const applyImportedRecipe=async()=>{
+    if(!pendingRecipe)return
+    setBusy(true)
+    try{
+      // Revalidate against CURRENT metadata: a recording may have been replaced
+      // since the recipe was first imported.
+      if(!info)throw Error('No active recording.')
+      const result=inspectProcessingRecipe(pendingRecipe.recipe,info)
+      if(remote)setRemoteInfo(await api.pipeline(remote,result.steps))
+      else setRecord(applySteps(record,result.steps))
+      setQcReport(null);setQualityMatrix(null);setPendingRecipe(null)
+      success(locale==='fr'?'Pipeline appliqué. Les données brutes restent intactes.':
+        'Processing recipe applied. Original data remain intact.')
+    }catch(e){error(e)}finally{setBusy(false)}
+  }
+  const generateAudit=async(type:'html'|'json')=>{
+    if(!info)return
+    setBusy(true)
+    try{
+      // Always compute fresh QC; neither the selected-channel result nor an old
+      // matrix can silently contaminate a report after a processing change.
+      const report=remote?await api.qcAllWindows(remote,qcWindowSeconds):
+        auditQuality(record,qcWindowSeconds)
+      setQualityMatrix(report)
+      const audit=buildAuditData(info,report,
+        remote?'Python / SciPy / MNE / NeuroKit2':'Offline browser / exploratory',
+        redactSourceName)
+      if(type==='html')saveBlob(auditHTML(audit,locale),'text/html;charset=utf-8',
+        'neurocanvas_scientific_audit.html')
+      else saveBlob(auditJSON(audit),'application/json',
+        'neurocanvas_scientific_audit.json')
+      success(locale==='fr'?'Rapport descriptif exporté. Aucun échantillon inclus.':
+        'Descriptive report exported without signal samples.')
+    }catch(e){error(e)}finally{setBusy(false)}
   }
   const exportSession = () => {
     if (remote) { error('Les sessions Python en mémoire ne sont pas sérialisées. Exporter les données CSV et la provenance JSON.'); return }
